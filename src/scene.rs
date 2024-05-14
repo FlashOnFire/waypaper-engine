@@ -1,5 +1,6 @@
 use std::collections::HashMap;
-use std::fs;
+use std::{fs, io};
+use std::fs::create_dir_all;
 use std::path::PathBuf;
 
 #[derive(Debug)]
@@ -21,6 +22,10 @@ impl FileContent {
 
     pub fn bytes(&self) -> &[u8] {
         &self.data
+    }
+
+    pub fn save_to_disk(&self, path: &PathBuf) -> io::Result<()> {
+        fs::write(path, self.bytes())
     }
 }
 
@@ -47,6 +52,26 @@ impl ScenePackage {
         Ok(ScenePackage {
             contents,
         })
+    }
+
+    pub fn save_to_disk(&self, dir: &PathBuf) -> Result<(), Box<dyn std::error::Error>>  {
+        if !dir.try_exists()? {
+            create_dir_all(dir)?;
+        }
+        
+        assert!(dir.is_dir());
+        
+        for c in self.contents.values() {
+            let path = &dir.join(c.name.clone());
+            
+            if let Some(parent_dir) = path.parent() {
+                create_dir_all(parent_dir)?;
+            }
+            
+            c.save_to_disk(path)?;
+        }
+        
+        Ok(())
     }
 }
 
