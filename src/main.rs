@@ -1,6 +1,7 @@
 mod wallpaper;
 mod project;
 mod scene;
+mod wl_renderer;
 
 use std::error::Error;
 use std::ffi::OsString;
@@ -10,6 +11,7 @@ use std::str::FromStr;
 use crate::project::WEProject;
 use crate::scene::ScenePackage;
 use crate::wallpaper::Wallpaper;
+use crate::wl_renderer::State;
 
 const WP_DIR: &str = "/home/flashonfire/.steam/steam/steamapps/workshop/content/431960/";
 
@@ -59,6 +61,9 @@ fn main() -> Result<(), Box<dyn Error>> {
             scene.save_to_disk(&Path::new("./scene").to_path_buf())?;
         }
     }
+    
+    let mut state = State::new();
+    state.loop_fn();
 
     Ok(())
 }
