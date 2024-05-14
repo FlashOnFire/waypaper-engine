@@ -161,13 +161,13 @@ fn from_str_color<'de, D>(deserializer: D) -> Result<(f32, f32, f32), D::Error>
     where D: Deserializer<'de>,
 {
     let map: HashMap<String, String> = Deserialize::deserialize(deserializer)?;
-    let s = map.get("value").ok_or(D::Error::missing_field("value"))?;
+    let s = map.get("value").ok_or(Error::missing_field("value"))?;
 
     let parts = s.split(' ')
         .map(f32::from_str)
         .map(|f|
             f.map_err(
-                D::Error::custom
+                Error::custom
             ))
         .collect::<Result<Vec<_>, _>>()?;
 
@@ -178,7 +178,7 @@ fn from_str_color<'de, D>(deserializer: D) -> Result<(f32, f32, f32), D::Error>
             parts[1]
         ))
     } else {
-        Err(D::Error::invalid_length(parts.len(), &"3 floats"))
+        Err(Error::invalid_length(parts.len(), &"3 floats"))
     }
 }
 
@@ -210,7 +210,7 @@ fn as_wp_type<'de, D>(deserializer: D) -> Result<WallpaperType, D::Error>
                 "video" => Ok(WallpaperType::Video),
                 "scene" => Ok(WallpaperType::Scene),
                 "web" => Ok(WallpaperType::Web),
-                _ => Err(D::Error::invalid_value(Unexpected::Str(&str), &"Either video, scene, web or preset"))
+                _ => Err(Error::invalid_value(Unexpected::Str(&str), &"Either video, scene, web or preset"))
             }
         }
         Err(a) => { Err(a) }

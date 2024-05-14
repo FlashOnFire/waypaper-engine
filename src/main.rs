@@ -3,7 +3,7 @@ mod project;
 mod scene;
 
 use std::error::Error;
-use std::ffi::{OsStr, OsString};
+use std::ffi::OsString;
 use std::fs;
 use std::path::Path;
 use std::str::FromStr;
@@ -17,12 +17,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     println!("Hello, world!");
     let mut wallpapers = vec![];
 
-    for entry in (fs::read_dir(WP_DIR)?).flatten().enumerate() {
+    for entry in fs::read_dir(WP_DIR)?.flatten().enumerate() {
         println!("{0} : {1:?}", entry.0, entry.1.path());
 
         let mut wp = Wallpaper::from(&entry.1)?;
 
-        let add_id = |proj: &mut WEProject, filename: &OsString| -> Result<(), Box<dyn std::error::Error>> {
+        let add_id = |proj: &mut WEProject, filename: &OsString| -> Result<(), Box<dyn Error>> {
             if proj.workshop_id.is_none() {
                 proj.workshop_id = Some(u64::from_str(filename.to_str().unwrap())?);
             }
