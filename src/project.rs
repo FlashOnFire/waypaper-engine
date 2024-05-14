@@ -9,12 +9,11 @@ use serde_this_or_that::{as_bool, as_f64, as_i64};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WEProject {
-    #[serde(default)]
     #[serde(rename = "type")]
-    #[serde(flatten)]
     #[serde(deserialize_with = "as_wp_type")]
+    #[serde(default)]
     pub wallpaper_type: WallpaperType,
-    
+
     #[serde(flatten)]
     #[serde(default)]
     pub preset: Option<Preset>,
@@ -118,9 +117,10 @@ pub struct ComboOption {
     label: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum WallpaperType {
+    #[default]
     Preset,
     #[serde(alias = "Video")]
     Video,
@@ -204,15 +204,15 @@ fn as_wp_type<'de, D>(deserializer: D) -> Result<WallpaperType, D::Error>
     where D: Deserializer<'de>,
 {
     let string: Result<String, _> = Deserialize::deserialize(deserializer);
-    Ok(match string {
+    match string {
         Ok(str) => {
             match str.to_lowercase().as_str() {
-                "video" => WallpaperType::Video,
-                "scene" => WallpaperType::Scene,
-                "web" => WallpaperType::Web,
-                _ => return Err(D::Error::invalid_value(Unexpected::Str(&str), &"Either video, scene, web or preset"))
+                "video" => Ok(WallpaperType::Video),
+                "scene" => Ok(WallpaperType::Scene),
+                "web" => Ok(WallpaperType::Web),
+                _ => Err(D::Error::invalid_value(Unexpected::Str(&str), &"Either video, scene, web or preset"))
             }
         }
-        Err(_) => { WallpaperType::Preset }
-    })
+        Err(a) => { Err(a) }
+    }
 }
