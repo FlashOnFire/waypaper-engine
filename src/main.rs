@@ -59,7 +59,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
             let file = scene.contents.get("sounds/Fantom ‘87 - Pay Phone.mp3").unwrap();
             println!("Reading {}", file.name);
-            
+
             let bytes = file.bytes();
             fs::write(Path::new("../a.mp3"), bytes).unwrap();
         }

@@ -154,7 +154,7 @@ pub enum PresetValue {
     },
     Integer {
         value: i32,
-    }
+    },
 }
 
 fn from_str_color<'de, D>(deserializer: D) -> Result<(f32, f32, f32), D::Error>

@@ -18,7 +18,7 @@ impl FileContent {
     pub fn as_str(&self) -> String {
         String::from_utf8_lossy(&self.data).to_string()
     }
-    
+
     pub fn bytes(&self) -> &[u8] {
         &self.data
     }
