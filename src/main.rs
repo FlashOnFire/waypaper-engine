@@ -8,7 +8,7 @@ use std::fs;
 use std::path::Path;
 use std::str::FromStr;
 use crate::project::WEProject;
-use crate::scene::Scene;
+use crate::scene::ScenePackage;
 use crate::wallpaper::Wallpaper;
 
 const WP_DIR: &str = "/home/flashonfire/.steam/steam/steamapps/workshop/content/431960/";
@@ -55,10 +55,15 @@ fn main() -> Result<(), Box<dyn Error>> {
         if path.exists() {
             println!("Found scene.pkg file ! (Path : {:?})", path);
 
-            let scene = Scene::from(&path);
+            let scene = ScenePackage::from(&path)?;
+
+            let file = scene.contents.get("sounds/Fantom ‘87 - Pay Phone.mp3").unwrap();
+            println!("Reading {}", file.name);
+            
+            let bytes = file.bytes();
+            fs::write(Path::new("../a.mp3"), bytes).unwrap();
         }
     }
-
 
     Ok(())
 }
