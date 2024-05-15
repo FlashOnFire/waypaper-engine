@@ -1,3 +1,4 @@
+use std::rc::Rc;
 use smithay_client_toolkit::{
     compositor::{CompositorHandler, CompositorState},
     delegate_compositor, delegate_layer, delegate_output,
@@ -20,61 +21,64 @@ use smithay_client_toolkit::{
 use smithay_client_toolkit::reexports::client::{Connection, EventQueue, QueueHandle};
 use smithay_client_toolkit::reexports::client::globals::{GlobalList, registry_queue_init};
 use smithay_client_toolkit::reexports::client::protocol::{wl_output, wl_seat, wl_shm, wl_surface};
+use smithay_client_toolkit::reexports::client::protocol::wl_output::WlOutput;
+use smithay_client_toolkit::shell::wlr_layer::Anchor;
+use smithay_client_toolkit::shm::slot::Buffer;
 
-pub struct State {
-    _connection: Connection,
+pub struct WLState {
+    connection: Rc<Connection>,
     _globals: GlobalList,
     event_queue: EventQueue<SimpleLayer>,
     _queue_handle: QueueHandle<SimpleLayer>,
     _compositor: CompositorState,
     _layer_shell: LayerShell,
-    
+
     simple_layer: SimpleLayer,
 }
 
-impl State {
-    pub fn new() -> Self {
-        let conn = Connection::connect_to_env().unwrap();
+impl WLState {
+    pub fn new(conn: Rc<Connection>, output: &WlOutput) -> Self {
         let (globals, event_queue) = registry_queue_init(&conn).unwrap();
         let qh = event_queue.handle();
+
+        let output_state = OutputState::new(&globals, &qh);
 
         let compositor = CompositorState::bind(&globals, &qh).expect("wl_compositor is not available");
         let layer_shell = LayerShell::bind(&globals, &qh).expect("layer shell is not available");
         let shm = Shm::bind(&globals, &qh).expect("wl_shm is not available");
-        
-        
+
+
         let surface = compositor.create_surface(&qh);
-        let layer =
-            layer_shell.create_layer_surface(&qh, surface, Layer::Background, Some("simple_layer"), None);
-        layer.set_keyboard_interactivity(KeyboardInteractivity::None);
-        layer.set_size(256, 256);
         
+        let layer =
+            layer_shell.create_layer_surface(&qh, surface, Layer::Background, Some("waypaper_engine"), Some(output));
+        layer.set_keyboard_interactivity(KeyboardInteractivity::None);
+        layer.set_anchor(Anchor::BOTTOM | Anchor::TOP | Anchor::LEFT | Anchor::RIGHT);
+        layer.set_size(0, 0);
+
         layer.commit();
 
-        let pool = SlotPool::new(256 * 256 * 4, &shm).expect("Failed to create pool");
-
         let simple_layer = SimpleLayer {
-            // Seats and outputs may be hotplugged at runtime, therefore we need to setup a registry state to
-            // listen for seats and outputs.
             registry_state: RegistryState::new(&globals),
             seat_state: SeatState::new(&globals, &qh),
-            output_state: OutputState::new(&globals, &qh),
+            output_state,
             shm,
 
             exit: false,
             first_configure: true,
-            pool,
+            pool: None,
             width: 256,
             height: 256,
-            shift: None,
+            shift: Some(0),
             layer,
             //keyboard: None,
             //keyboard_focus: false,
             //pointer: None,
+            buffer: None,
         };
-        
-        State {
-            _connection: conn,
+
+        WLState {
+            connection: conn,
             _globals: globals,
             event_queue,
             _queue_handle: qh,
@@ -105,7 +109,7 @@ struct SimpleLayer {
 
     exit: bool,
     first_configure: bool,
-    pool: SlotPool,
+    pool: Option<SlotPool>,
     width: u32,
     height: u32,
     shift: Option<u32>,
@@ -113,6 +117,7 @@ struct SimpleLayer {
     //keyboard: Option<wl_keyboard::WlKeyboard>,
     //keyboard_focus: bool,
     //pointer: Option<wl_pointer::WlPointer>,
+    buffer: Option<Buffer>,
 }
 
 impl CompositorHandler for SimpleLayer {
@@ -188,13 +193,24 @@ impl LayerShellHandler for SimpleLayer {
         configure: LayerSurfaceConfigure,
         _serial: u32,
     ) {
+        println!("{:?}", configure.new_size);
+
         if configure.new_size.0 == 0 || configure.new_size.1 == 0 {
-            self.width = 256;
-            self.height = 256;
+            self.width = 1280;
+            self.height = 720;
         } else {
             self.width = configure.new_size.0;
             self.height = configure.new_size.1;
         }
+
+        self.pool = Some(SlotPool::new(self.width as usize * self.height as usize * 4, &self.shm).expect("Failed to create pool"));
+
+        let (buffer, _) = self
+            .pool.as_mut().unwrap()
+            .create_buffer(self.width as i32, self.height as i32, self.width as i32 * 4, wl_shm::Format::Argb8888)
+            .expect("create buffer");
+        
+        self.buffer = Some(buffer);
 
         // Initiate the first draw.
         if self.first_configure {
@@ -263,12 +279,9 @@ impl SimpleLayer {
     pub fn draw(&mut self, qh: &QueueHandle<Self>) {
         let width = self.width;
         let height = self.height;
-        let stride = self.width as i32 * 4;
-
-        let (buffer, canvas) = self
-            .pool
-            .create_buffer(width as i32, height as i32, stride, wl_shm::Format::Argb8888)
-            .expect("create buffer");
+        
+        let binding = self.pool.as_mut().unwrap();
+        let canvas = self.buffer.as_mut().unwrap().canvas(binding).unwrap();
 
         // Draw to the window:
         {
@@ -288,7 +301,7 @@ impl SimpleLayer {
             });
 
             if let Some(shift) = &mut self.shift {
-                *shift = (*shift + 1) % width;
+                *shift = (*shift + 10) % width;
             }
         }
 
@@ -299,7 +312,7 @@ impl SimpleLayer {
         self.layer.wl_surface().frame(qh, self.layer.wl_surface().clone());
 
         // Attach and commit to present.
-        buffer.attach_to(self.layer.wl_surface()).expect("buffer attach");
+        self.buffer.as_mut().unwrap().attach_to(self.layer.wl_surface()).expect("buffer attach");
         self.layer.commit();
 
         // TODO save and reuse buffer when the window size is unchanged.

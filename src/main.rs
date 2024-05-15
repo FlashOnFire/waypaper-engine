@@ -2,16 +2,20 @@ mod wallpaper;
 mod project;
 mod scene;
 mod wl_renderer;
+mod list_outputs;
 
 use std::error::Error;
 use std::ffi::OsString;
 use std::fs;
 use std::path::Path;
+use std::rc::Rc;
 use std::str::FromStr;
+use smithay_client_toolkit::reexports::client::Connection;
+use crate::list_outputs::ListOutputs;
 use crate::project::WEProject;
 use crate::scene::ScenePackage;
 use crate::wallpaper::Wallpaper;
-use crate::wl_renderer::State;
+use crate::wl_renderer::WLState;
 
 const WP_DIR: &str = "/home/flashonfire/.steam/steam/steamapps/workshop/content/431960/";
 
@@ -61,9 +65,17 @@ fn main() -> Result<(), Box<dyn Error>> {
             scene.save_to_disk(&Path::new("./scene").to_path_buf())?;
         }
     }
-    
-    let mut state = State::new();
-    state.loop_fn();
 
+    let conn = Rc::new(Connection::connect_to_env().unwrap());
+    
+    let mut list_outputs = ListOutputs::new(&conn);
+    let outputs = list_outputs.get_outputs();
+    outputs.print_outputs();
+    let output = outputs.iter().find(|output| output.1.name.as_ref().unwrap() == "DP-1").unwrap().0;
+    
+    let mut state = WLState::new(conn, output);
+    state.loop_fn();
+    
+    
     Ok(())
 }
