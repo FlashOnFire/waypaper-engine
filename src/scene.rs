@@ -82,9 +82,9 @@ fn read_str(data: &[u8], position: &mut usize) -> String {
 }
 
 fn read_sized_str(data: &[u8], position: &mut usize, size: u32) -> String {
-    let bytes: Vec<u8> = data.iter()
+    let bytes: Vec<u8> = data
+        .iter()
         .skip(*position)
-        .clone()
         .take(size as usize)
         .copied()
         .collect();
@@ -97,7 +97,6 @@ fn read_u32(data: &[u8], position: &mut usize) -> u32 {
     let first_4_bytes = data
         .iter()
         .skip(*position)
-        .clone()
         .take(4)
         .copied()
         .collect::<Vec<u8>>()

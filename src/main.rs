@@ -3,6 +3,8 @@ mod project;
 mod scene;
 mod wl_renderer;
 mod list_outputs;
+mod mpv;
+mod egl;
 
 use std::error::Error;
 use std::ffi::OsString;
@@ -11,6 +13,7 @@ use std::path::Path;
 use std::rc::Rc;
 use std::str::FromStr;
 use smithay_client_toolkit::reexports::client::Connection;
+use crate::egl::EGLState;
 use crate::list_outputs::ListOutputs;
 use crate::project::WEProject;
 use crate::scene::ScenePackage;
@@ -67,15 +70,39 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     let conn = Rc::new(Connection::connect_to_env().unwrap());
-    
+
     let mut list_outputs = ListOutputs::new(&conn);
     let outputs = list_outputs.get_outputs();
     outputs.print_outputs();
-    let output = outputs.iter().find(|output| output.1.name.as_ref().unwrap() == "DP-1").unwrap().0;
-    
-    let mut state = WLState::new(conn, output);
-    state.loop_fn();
-    
+    let output = outputs.iter().find(|output| output.1.name.as_ref().unwrap() == "DP-3").unwrap();
+
+    /*let wp = wallpapers.iter()
+        .filter(|w|
+            matches!(w, Wallpaper::Video { .. })
+        ).nth(7)
+        .unwrap();*/
+
+    let wp = wallpapers.iter().find(|wp| match wp {
+        Wallpaper::Video {project} => {
+            project.workshop_id.unwrap() == 3212120834
+        }
+        _ => false
+    }).unwrap();
+
+    if let Wallpaper::Video { project } = wp {
+        println!("{:?}", wp);
+
+        let path = Path::new(WP_DIR).join(project.workshop_id.unwrap().to_string()).join(project.file.as_ref().unwrap());
+
+        if path.exists() {
+            println!("Found video file ! (Path : {:?})", path);
+
+            let egl_state = Rc::new(EGLState::new(&conn));
+
+            let mut state = WLState::new(conn, output, path, egl_state);
+            state.loop_fn();
+        }
+    }
     
     Ok(())
 }

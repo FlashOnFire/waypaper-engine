@@ -47,9 +47,10 @@ impl OutputsList {
             let current_mode = info.modes.iter().find(|mode| mode.current).expect("Couldn't find output current mode");
             let (width, height) = current_mode.dimensions;
             let refresh_rate = (current_mode.refresh_rate as f32 / 1000.0).ceil() as i32;
+            let scale = info.scale_factor;
 
             println!("Outputs :");
-            println!("\t- {:} : {}x{} - {}hz", name, width, height, refresh_rate);
+            println!("\t- {:} : {}x{} - {}hz - {}", name, width, height, refresh_rate, scale);
         }
     }
 }
