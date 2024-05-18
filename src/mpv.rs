@@ -9,12 +9,12 @@ use smithay_client_toolkit::reexports::client::Connection;
 use crate::egl::get_proc_address;
 
 pub struct MpvRenderer {
-    _mpv: Mpv,
+    mpv: Mpv,
     pub render_context: RenderContext,
 }
 
 impl MpvRenderer {
-    pub fn new(connection: Rc<Connection>, egl: Rc<Instance<Static>>, file: PathBuf) -> Self {
+    pub fn new(connection: Rc<Connection>, egl: Rc<Instance<Static>>) -> Self {
         let mut mpv = Mpv::new().expect("Error while creating mpv");
 
         // Setting various properties
@@ -26,8 +26,7 @@ impl MpvRenderer {
         //mpv.set_property("fbo-format", "rgba8").unwrap(); // FrameBuffer format (worse quality when setting it and i don't know why it works without but it works)
         mpv.set_property("vo", "libmpv").unwrap(); // Rendering through libmpv
         mpv.set_property("hwdec", "auto").unwrap(); // Auto-Detect Hardware Decoding
-        
-        
+
         mpv.set_property("loop", "inf").unwrap(); // Play video in loop
 
         unsafe {
@@ -43,12 +42,18 @@ impl MpvRenderer {
                 ],
             ).unwrap();
 
-            mpv.playlist_load_files(&[(file.to_str().unwrap(), FileState::AppendPlay, None)]).unwrap();
-
             MpvRenderer {
-                _mpv: mpv,
+                mpv,
                 render_context,
             }
         }
+    }
+
+    pub fn play_file(&self, file: PathBuf) {
+        self.mpv.playlist_load_files(&[(file.to_str().unwrap(), FileState::Replace, None)]).unwrap();
+    }
+
+    pub fn set_speed(&self, speed: f32) {
+        self.mpv.set_property("speed", format!("{:.2}", speed)).unwrap()
     }
 }
