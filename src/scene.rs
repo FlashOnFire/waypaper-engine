@@ -1,15 +1,16 @@
 use std::collections::HashMap;
 use std::{fs, io};
 use std::fs::create_dir_all;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct FileEntry {
     pub(crate) name: String,
     offset: u32,
     size: u32,
 }
 
+#[derive(Debug, Clone)]
 pub struct FileContent {
     pub(crate) name: String,
     data: Vec<u8>,
@@ -29,12 +30,13 @@ impl FileContent {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct ScenePackage {
     pub contents: HashMap<String, FileContent>,
 }
 
 impl ScenePackage {
-    pub fn from(file: &PathBuf) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn from(file: &Path) -> Result<Self, Box<dyn std::error::Error>> {
         let data: Vec<u8> = fs::read(file)?;
         let mut position: usize = 0;
 

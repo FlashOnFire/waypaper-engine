@@ -1,6 +1,7 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
-use khronos_egl::{Instance, Static};
+
+use khronos_egl::{Context, Instance, Static};
 use libmpv2::{FileState, Mpv};
 use libmpv2::render::{OpenGLInitParams, RenderContext, RenderParam, RenderParamApiType};
 use smithay_client_toolkit::reexports::client::Connection;
@@ -9,13 +10,16 @@ use smithay_client_toolkit::reexports::client::Connection;
 use crate::egl::get_proc_address;
 
 pub struct MpvRenderer {
+    connection: Rc<Connection>,
+    egl: Rc<Instance<Static>>,
     mpv: Mpv,
-    pub render_context: RenderContext,
+    video_path: PathBuf,
+    pub render_context: Option<RenderContext>,
 }
 
 impl MpvRenderer {
-    pub fn new(connection: Rc<Connection>, egl: Rc<Instance<Static>>) -> Self {
-        let mut mpv = Mpv::new().expect("Error while creating mpv");
+    pub fn new(connection: Rc<Connection>, egl: Rc<Instance<Static>>, video_path: PathBuf) -> Self {
+        let mpv = Mpv::new().expect("Error while creating mpv");
 
         // Setting various properties
         mpv.set_property("terminal", "yes").unwrap(); // Logs in term
@@ -29,31 +33,46 @@ impl MpvRenderer {
 
         mpv.set_property("loop", "inf").unwrap(); // Play video in loop
 
+
+        MpvRenderer {
+            connection,
+            egl,
+            mpv,
+            video_path,
+            render_context: None,
+        }
+    }
+
+    pub fn init_rendering_context(&mut self) {
         unsafe {
-            let render_context = RenderContext::new(
-                mpv.ctx.as_mut(),
+            self.render_context = Some(RenderContext::new(
+                self.mpv.ctx.as_mut(),
                 vec![
                     RenderParam::ApiType(RenderParamApiType::OpenGl),
                     RenderParam::InitParams(OpenGLInitParams {
                         get_proc_address,
-                        ctx: egl,
+                        ctx: self.egl.clone(),
                     }),
-                    RenderParam::WaylandDisplay(connection.backend().display_ptr() as *mut std::ffi::c_void),
+                    RenderParam::WaylandDisplay(self.connection.backend().display_ptr() as *mut std::ffi::c_void),
                 ],
-            ).unwrap();
-
-            MpvRenderer {
-                mpv,
-                render_context,
-            }
+            ).unwrap());
         }
+        
+        self.play_file(&self.video_path);
     }
-
-    pub fn play_file(&self, file: PathBuf) {
+    pub fn play_file(&self, file: &Path) {
         self.mpv.playlist_load_files(&[(file.to_str().unwrap(), FileState::Replace, None)]).unwrap();
     }
 
     pub fn set_speed(&self, speed: f32) {
         self.mpv.set_property("speed", format!("{:.2}", speed)).unwrap()
+    }
+
+    pub fn render(&mut self, width: u32, height: u32) {
+        if self.render_context.is_none() {
+            self.init_rendering_context();
+        }
+        
+        self.render_context.as_ref().unwrap().render::<Context>(0, width as i32, height as i32, true).unwrap()
     }
 }

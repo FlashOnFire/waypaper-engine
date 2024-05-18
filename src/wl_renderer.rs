@@ -1,12 +1,11 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::ops::{Deref, DerefMut};
-use std::path::PathBuf;
 use std::rc::Rc;
 use fps_counter::FPSCounter;
 
 use gl::COLOR_BUFFER_BIT;
-use khronos_egl::{ATTRIB_NONE, Context, Surface};
+use khronos_egl::{ATTRIB_NONE, Surface};
 use smithay_client_toolkit::{
     compositor::{CompositorHandler, CompositorState},
     delegate_compositor, delegate_layer, delegate_output,
@@ -34,35 +33,38 @@ use smithay_client_toolkit::shell::wlr_layer::Anchor;
 use wayland_egl::WlEglSurface;
 
 use crate::egl::EGLState;
-use crate::mpv::MpvRenderer;
+use crate::wallpaper::Wallpaper;
 
 pub struct WLState {
     pub connection: Rc<Connection>,
-    egl_state: Rc<EGLState>,
+    pub(crate) egl_state: Rc<EGLState>,
     pub(crate) _globals: GlobalList,
     pub(crate) event_queue: Rc<RefCell<EventQueue<WLState>>>,
     pub(crate) queue_handle: QueueHandle<WLState>,
     registry_state: RegistryState,
     output_state: OutputState,
     seat_state: SeatState,
-    compositor: CompositorState,
+    compositor_state: CompositorState,
     layer_shell: LayerShell,
 
     pub layers: HashMap<String, SimpleLayer>,
 }
 
 impl WLState {
-    pub fn new(connection: Rc<Connection>, egl_state: Rc<EGLState>) -> Self {
+    pub fn new() -> Self {
+        let connection = Rc::new(Connection::connect_to_env().unwrap());
+        let egl_state = Rc::new(EGLState::new(&connection));
+
         let (globals, event_queue) = registry_queue_init(&connection).unwrap();
         let queue_handle = event_queue.handle();
 
         WLState {
-            connection: connection.clone(),
-            egl_state: egl_state.clone(),
+            connection,
+            egl_state,
             registry_state: RegistryState::new(&globals),
             output_state: OutputState::new(&globals, &queue_handle),
             seat_state: SeatState::new(&globals, &queue_handle),
-            compositor: CompositorState::bind(&globals, &queue_handle).expect("wl_compositor is not available"),
+            compositor_state: CompositorState::bind(&globals, &queue_handle).expect("wl_compositor is not available"),
             layer_shell: LayerShell::bind(&globals, &queue_handle).expect("layer shell is not available"),
             _globals: globals,
             event_queue: Rc::new(RefCell::new(event_queue)),
@@ -83,8 +85,8 @@ impl WLState {
         }
     }
 
-    pub fn setup_layer(&mut self, output: (&WlOutput, &OutputInfo), file: PathBuf) {
-        let surface = self.compositor.create_surface(&self.queue_handle);
+    pub fn setup_layer(&mut self, output: (&WlOutput, &OutputInfo)) -> &mut SimpleLayer {
+        let surface = self.compositor_state.create_surface(&self.queue_handle);
 
         let output_size = output.1.logical_size.unwrap();
 
@@ -102,7 +104,7 @@ impl WLState {
         layer.set_keyboard_interactivity(KeyboardInteractivity::None); // No keyboard grabbing at all
 
         layer.commit();
-        self.connection.roundtrip().unwrap(); // Block until the wayland server has processed everything 
+        self.connection.roundtrip().unwrap(); // Block until the wayland server has processed everything
 
         let wl_egl_surface = WlEglSurface::new(
             layer.wl_surface().id(),
@@ -125,8 +127,8 @@ impl WLState {
 
         self.egl_state.attach_context(egl_window_surface);
 
-        let mpv_renderer = MpvRenderer::new(self.connection.clone(), self.egl_state.egl.clone());
-        mpv_renderer.play_file(file);
+        //let mpv_renderer = MpvRenderer::new(self.connection.clone(), self.egl_state.egl.clone());
+        //mpv_renderer.play_file(file);
 
         let simple_layer = SimpleLayer {
             exit: false,
@@ -137,16 +139,20 @@ impl WLState {
             //keyboard: None,
             //keyboard_focus: false,
             //pointer: None,
-            mpv_renderer,
+            //mpv_renderer,
             egl_state: self.egl_state.clone(),
             _wl_egl_surface: wl_egl_surface,
             egl_window_surface,
             output: (output.0.clone(), output.1.clone()),
 
             fps_counter: FPSCounter::new(),
+            wallpaper: None,
         };
 
-        self.layers.insert(output.1.name.as_ref().unwrap().clone(), simple_layer);
+        let output_name = output.1.name.as_ref().unwrap().clone();
+        self.layers.insert(output_name.clone(), simple_layer);
+
+        self.layers.get_mut(&output_name).unwrap()
     }
 
     pub fn get_outputs(&mut self) -> OutputsList {
@@ -197,12 +203,13 @@ pub struct SimpleLayer {
     //keyboard: Option<wl_keyboard::WlKeyboard>,
     //keyboard_focus: bool,
     //pointer: Option<wl_pointer::WlPointer>,
-    mpv_renderer: MpvRenderer,
+    //mpv_renderer: MpvRenderer,
     egl_state: Rc<EGLState>,
     _wl_egl_surface: WlEglSurface,
     egl_window_surface: Surface,
     output: (WlOutput, OutputInfo),
 
+    pub(crate) wallpaper: Option<Wallpaper>,
     fps_counter: FPSCounter,
 }
 
@@ -363,11 +370,15 @@ impl SimpleLayer {
         // Draw to the window:
         {
             unsafe {
-                gl::ClearColor(1.0, 1.0, 1.0, 1.0);
-                gl::Clear(COLOR_BUFFER_BIT);
-            }
+                let clear_color = if let Some(wallpaper) = &self.wallpaper { wallpaper.clear_color() } else { (0.0, 0.0, 0.0) };
 
-            self.mpv_renderer.render_context.render::<Context>(0, self.width as i32, self.height as i32, true).unwrap();
+                gl::ClearColor(clear_color.0, clear_color.1, clear_color.2, 1.0);
+                gl::Clear(COLOR_BUFFER_BIT);
+                
+                if let Some(wallpaper) = self.wallpaper.as_mut() {
+                    wallpaper.render(self.width, self.height);
+                }
+            }
         }
 
         // Damage the entire window and swap buffers
