@@ -52,7 +52,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let egl_state = Rc::new(EGLState::new(&conn));
     let mut state = WLState::new(conn.clone(), egl_state.clone());
 
-    
+
     let outputs = state.get_outputs();
     outputs.print_outputs();
     let output = outputs.iter().find(|output| output.1.name.as_ref().unwrap() == "DP-3").unwrap();
