@@ -138,6 +138,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "fps_counter"
+version = "3.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ff23a4d90ba4b859f370ee3c12ca3b1ca80d8ee144b279e135f6852cdadd6dd6"
+dependencies = [
+ "instant",
+]
+
+[[package]]
 name = "gl"
 version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -162,6 +171,15 @@ name = "hermit-abi"
 version = "0.3.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d231dfb89cfffdbc30e7fc41579ed6066ad03abda9e567ccafae602b97ec5024"
+
+[[package]]
+name = "instant"
+version = "0.1.13"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e0242819d153cba4b4b05a5a8f2a7e9bbf97b6055b2a002b395c96b5ff3c0222"
+dependencies = [
+ "cfg-if",
+]
 
 [[package]]
 name = "itoa"
@@ -586,6 +604,7 @@ name = "waypaper-engine"
 version = "0.1.0"
 dependencies = [
  "cgmath",
+ "fps_counter",
  "gl",
  "khronos-egl",
  "libmpv2",

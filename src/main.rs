@@ -60,7 +60,8 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let wp = wallpapers.iter().find(|wp| match wp {
         Wallpaper::Video { project } => {
-            project.workshop_id.unwrap() == 3212120834
+            //project.workshop_id.unwrap() == 3212120834
+            project.workshop_id.expect("Wallpaper not found") == 1195491399
         }
         _ => false
     }).unwrap();
@@ -75,7 +76,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
 
             state.setup_layer(output, path.clone());
-            state.setup_layer(output2, path.clone());
+            //state.setup_layer(output2, path.clone());
 
             state.loop_fn();
         }

@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use std::ops::{Deref, DerefMut};
 use std::path::PathBuf;
 use std::rc::Rc;
+use fps_counter::FPSCounter;
 
 use gl::COLOR_BUFFER_BIT;
 use khronos_egl::{ATTRIB_NONE, Context, Surface};
@@ -140,6 +141,8 @@ impl WLState {
             _wl_egl_surface: wl_egl_surface,
             egl_window_surface,
             output: (output.0.clone(), output.1.clone()),
+
+            fps_counter: FPSCounter::new(),
         };
 
         self.layers.insert(output.1.name.as_ref().unwrap().clone(), simple_layer);
@@ -198,6 +201,8 @@ pub struct SimpleLayer {
     _wl_egl_surface: WlEglSurface,
     egl_window_surface: Surface,
     output: (WlOutput, OutputInfo),
+
+    fps_counter: FPSCounter,
 }
 
 impl CompositorHandler for WLState {
@@ -278,13 +283,13 @@ impl LayerShellHandler for WLState {
         println!("New Size : {:?}", configure.new_size);
 
         let layer = self.layers.values_mut().find(|l| l.layer == *layer_surface).unwrap();
-        
+
         // Size equal to zero means the compositor let us choose
-        
+
         if configure.new_size.0 != 0 {
             layer.width = configure.new_size.0;
         }
-        
+
         if configure.new_size.1 != 0 {
             layer.height = configure.new_size.1;
         }
@@ -376,6 +381,9 @@ impl SimpleLayer {
 
         // Commit to present.
         self.layer.commit();
+
+        let fps = self.fps_counter.tick();
+        println!("Output {} : {} FPS", self.output.1.name.as_ref().unwrap(), fps);
     }
 }
 
