@@ -1,5 +1,7 @@
 /target
 .idea
+.direnv
+result
 
 # Used for testing
 scene
