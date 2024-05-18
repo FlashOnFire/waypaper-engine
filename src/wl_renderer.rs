@@ -1,3 +1,6 @@
+use std::cell::RefCell;
+use std::collections::HashMap;
+use std::ops::{Deref, DerefMut};
 use std::path::PathBuf;
 use std::rc::Rc;
 
@@ -6,7 +9,7 @@ use khronos_egl::{ATTRIB_NONE, Context, Surface};
 use smithay_client_toolkit::{
     compositor::{CompositorHandler, CompositorState},
     delegate_compositor, delegate_layer, delegate_output,
-    delegate_registry, delegate_seat, delegate_shm,
+    delegate_registry, delegate_seat,
     output::{OutputHandler, OutputState},
     registry::{ProvidesRegistryState, RegistryState},
     registry_handlers,
@@ -20,7 +23,6 @@ use smithay_client_toolkit::{
             LayerSurfaceConfigure,
         },
     },
-    shm::{Shm, ShmHandler},
 };
 use smithay_client_toolkit::output::OutputInfo;
 use smithay_client_toolkit::reexports::client::{Connection, EventQueue, Proxy, QueueHandle};
@@ -35,39 +37,71 @@ use crate::mpv::MpvRenderer;
 
 pub struct WLState {
     pub connection: Rc<Connection>,
-    _globals: GlobalList,
-    event_queue: EventQueue<SimpleLayer>,
-    _queue_handle: QueueHandle<SimpleLayer>,
-    _compositor: CompositorState,
-    _layer_shell: LayerShell,
+    egl_state: Rc<EGLState>,
+    pub(crate) _globals: GlobalList,
+    pub(crate) event_queue: Rc<RefCell<EventQueue<WLState>>>,
+    pub(crate) queue_handle: QueueHandle<WLState>,
+    registry_state: RegistryState,
+    output_state: OutputState,
+    seat_state: SeatState,
+    compositor: CompositorState,
+    layer_shell: LayerShell,
 
-    pub simple_layer: SimpleLayer,
+    pub layers: HashMap<String, SimpleLayer>,
 }
 
 impl WLState {
-    pub fn new(connection: Rc<Connection>, output: (&WlOutput, &OutputInfo), file: PathBuf, egl_state: Rc<EGLState>) -> Self {
+    pub fn new(connection: Rc<Connection>, egl_state: Rc<EGLState>) -> Self {
         let (globals, event_queue) = registry_queue_init(&connection).unwrap();
-        let qh = event_queue.handle();
+        let queue_handle = event_queue.handle();
 
-        let output_state = OutputState::new(&globals, &qh);
+        WLState {
+            connection: connection.clone(),
+            egl_state: egl_state.clone(),
+            registry_state: RegistryState::new(&globals),
+            output_state: OutputState::new(&globals, &queue_handle),
+            seat_state: SeatState::new(&globals, &queue_handle),
+            compositor: CompositorState::bind(&globals, &queue_handle).expect("wl_compositor is not available"),
+            layer_shell: LayerShell::bind(&globals, &queue_handle).expect("layer shell is not available"),
+            _globals: globals,
+            event_queue: Rc::new(RefCell::new(event_queue)),
+            queue_handle,
 
-        let compositor = CompositorState::bind(&globals, &qh).expect("wl_compositor is not available");
-        let layer_shell = LayerShell::bind(&globals, &qh).expect("layer shell is not available");
-        let shm = Shm::bind(&globals, &qh).expect("wl_shm is not available");
+            layers: HashMap::new(),
+        }
+    }
 
-        let surface = compositor.create_surface(&qh);
-        
+    pub(crate) fn loop_fn(&mut self) {
+        loop {
+            self.event_queue.clone().borrow_mut().blocking_dispatch(self).unwrap();
+
+            if self.layers.values().any(|layer| layer.exit) {
+                println!("Exiting");
+                break;
+            }
+        }
+    }
+
+    pub fn setup_layer(&mut self, output: (&WlOutput, &OutputInfo), file: PathBuf) {
+        let surface = self.compositor.create_surface(&self.queue_handle);
+
         let output_size = output.1.logical_size.unwrap();
 
-        let layer =
-            layer_shell.create_layer_surface(&qh, surface, Layer::Background, Some("waypaper_engine"), Some(output.0));
-        layer.set_size(output_size.0 as u32, output_size.1 as u32);
-        layer.set_anchor(Anchor::BOTTOM | Anchor::TOP | Anchor::LEFT | Anchor::RIGHT);
-        layer.set_keyboard_interactivity(KeyboardInteractivity::None);
+        let layer = self.layer_shell.create_layer_surface(
+            &self.queue_handle,
+            surface,
+            Layer::Background,
+            Some("waypaper_engine"),
+            Some(output.0),
+        );
+
+        layer.set_exclusive_zone(-1); // -1 means we don't want our surface to be moved to accommodate for other surfaces
+        layer.set_anchor(Anchor::BOTTOM | Anchor::TOP | Anchor::LEFT | Anchor::RIGHT); // All anchors means centered on screen
+        layer.set_size(output_size.0 as u32, output_size.1 as u32); // We ask for the full size of the screen
+        layer.set_keyboard_interactivity(KeyboardInteractivity::None); // No keyboard grabbing at all
 
         layer.commit();
-
-        connection.roundtrip().unwrap();
+        self.connection.roundtrip().unwrap(); // Block until the wayland server has processed everything 
 
         let wl_egl_surface = WlEglSurface::new(
             layer.wl_surface().id(),
@@ -77,81 +111,80 @@ impl WLState {
 
         let egl_window_surface =
             unsafe {
-                egl_state.egl.create_platform_window_surface(
-                    egl_state.egl_display,
-                    egl_state.config,
+                self.egl_state.egl.create_platform_window_surface(
+                    self.egl_state.egl_display,
+                    self.egl_state.config,
                     wl_egl_surface.ptr() as khronos_egl::NativeWindowType,
                     &[ATTRIB_NONE],
                 )
             }.expect("Unable to create an EGL surface");
 
         layer.commit();
-        connection.roundtrip().unwrap();
-        connection.flush().unwrap();
+        self.connection.roundtrip().unwrap();
 
-        egl_state.egl.make_current(
-            egl_state.egl_display,
-            Some(egl_window_surface),
-            Some(egl_window_surface),
-            Some(egl_state.egl_context),
-        ).unwrap();
+        self.egl_state.attach_context(egl_window_surface);
+
+        let mpv_renderer = MpvRenderer::new(self.connection.clone(), self.egl_state.egl.clone(), file);
 
         let simple_layer = SimpleLayer {
-            registry_state: RegistryState::new(&globals),
-            seat_state: SeatState::new(&globals, &qh),
-            output_state,
-            shm,
-
             exit: false,
             first_configure: true,
-            width: 256,
-            height: 256,
+            width: output_size.0 as u32,
+            height: output_size.1 as u32,
             layer,
             //keyboard: None,
             //keyboard_focus: false,
             //pointer: None,
-            mpv_renderer: None,
-            egl_state: egl_state.clone(),
+            mpv_renderer,
+            egl_state: self.egl_state.clone(),
             _wl_egl_surface: wl_egl_surface,
             egl_window_surface,
+            output: (output.0.clone(), output.1.clone()),
         };
 
-        let mut wl_state = WLState {
-            connection: connection.clone(),
-            _globals: globals,
-            event_queue,
-            _queue_handle: qh,
-            _compositor: compositor,
-            _layer_shell: layer_shell,
-
-            simple_layer,
-        };
-
-        let mpv_renderer = MpvRenderer::new(connection, egl_state.egl.clone(), file);
-
-        wl_state.simple_layer.mpv_renderer = Some(mpv_renderer);
-
-        wl_state
+        self.layers.insert(output.1.name.as_ref().unwrap().clone(), simple_layer);
     }
 
-    pub(crate) fn loop_fn(&mut self) {
-        loop {
-            self.event_queue.blocking_dispatch(&mut self.simple_layer).unwrap();
+    pub fn get_outputs(&mut self) -> OutputsList {
+        self.event_queue.clone().borrow_mut().roundtrip(self).unwrap();
 
-            if self.simple_layer.exit {
-                println!("exiting layer");
-                break;
-            }
+        OutputsList(self.output_state.outputs().map(|output| (output.clone(), self.output_state.info(&output).unwrap())).collect())
+    }
+}
+
+pub struct OutputsList(HashMap<WlOutput, OutputInfo>);
+
+impl OutputsList {
+    pub fn print_outputs(&self) {
+        for info in self.0.values() {
+            let name = info.name.clone().expect("Output doesn't have a name");
+
+            let current_mode = info.modes.iter().find(|mode| mode.current).expect("Couldn't find output current mode");
+            let (width, height) = current_mode.dimensions;
+            let refresh_rate = (current_mode.refresh_rate as f32 / 1000.0).ceil() as i32;
+            let scale = info.scale_factor;
+
+            println!("Outputs :");
+            println!("\t- {:} : {}x{} - {}hz - {}", name, width, height, refresh_rate, scale);
         }
     }
 }
 
-pub struct SimpleLayer {
-    registry_state: RegistryState,
-    seat_state: SeatState,
-    output_state: OutputState,
-    shm: Shm,
+impl Deref for OutputsList {
+    type Target = HashMap<WlOutput, OutputInfo>;
 
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for OutputsList {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+pub struct SimpleLayer {
     exit: bool,
     first_configure: bool,
     width: u32,
@@ -160,22 +193,21 @@ pub struct SimpleLayer {
     //keyboard: Option<wl_keyboard::WlKeyboard>,
     //keyboard_focus: bool,
     //pointer: Option<wl_pointer::WlPointer>,
-    mpv_renderer: Option<MpvRenderer>,
+    mpv_renderer: MpvRenderer,
     egl_state: Rc<EGLState>,
     _wl_egl_surface: WlEglSurface,
     egl_window_surface: Surface,
-
+    output: (WlOutput, OutputInfo),
 }
 
-impl CompositorHandler for SimpleLayer {
+impl CompositorHandler for WLState {
     fn scale_factor_changed(
         &mut self,
         _conn: &Connection,
         _qh: &QueueHandle<Self>,
         _surface: &wl_surface::WlSurface,
         _new_factor: i32,
-    ) {        
-    }
+    ) {}
 
     fn transform_changed(
         &mut self,
@@ -189,14 +221,14 @@ impl CompositorHandler for SimpleLayer {
         &mut self,
         _conn: &Connection,
         qh: &QueueHandle<Self>,
-        _surface: &wl_surface::WlSurface,
+        surface: &wl_surface::WlSurface,
         _time: u32,
     ) {
-        self.draw(qh);
+        self.layers.values_mut().find(|layer| layer.layer.wl_surface() == surface).unwrap().draw(qh);
     }
 }
 
-impl OutputHandler for SimpleLayer {
+impl OutputHandler for WLState {
     fn output_state(&mut self) -> &mut OutputState {
         &mut self.output_state
     }
@@ -213,48 +245,59 @@ impl OutputHandler for SimpleLayer {
         _conn: &Connection,
         _qh: &QueueHandle<Self>,
         _output: WlOutput,
-    ) {}
+    ) {
+        // TODO resize wallpaper if output size or scale has changed
+    }
 
     fn output_destroyed(
         &mut self,
         _conn: &Connection,
         _qh: &QueueHandle<Self>,
-        _output: WlOutput,
-    ) {}
+        output: WlOutput,
+    ) {
+        if let Some(layer) = self.layers.values().find(|layer| layer.output.0 == output) {
+            // TODO : test this
+            self.layers.remove(&layer.output.1.name.clone().unwrap()).unwrap();
+        }
+    }
 }
 
-impl LayerShellHandler for SimpleLayer {
-    fn closed(&mut self, _conn: &Connection, _qh: &QueueHandle<Self>, _layer: &LayerSurface) {
-        self.exit = true;
+impl LayerShellHandler for WLState {
+    fn closed(&mut self, _conn: &Connection, _qh: &QueueHandle<Self>, layer: &LayerSurface) {
+        self.layers.values_mut().find(|l| l.layer == *layer).unwrap().exit = true;
     }
 
     fn configure(
         &mut self,
         _conn: &Connection,
         qh: &QueueHandle<Self>,
-        _layer: &LayerSurface,
+        layer_surface: &LayerSurface,
         configure: LayerSurfaceConfigure,
         _serial: u32,
     ) {
         println!("New Size : {:?}", configure.new_size);
 
-        if configure.new_size.0 == 0 || configure.new_size.1 == 0 {
-            self.width = 1280;
-            self.height = 720;
-        } else {
-            self.width = configure.new_size.0;
-            self.height = configure.new_size.1;
+        let layer = self.layers.values_mut().find(|l| l.layer == *layer_surface).unwrap();
+        
+        // Size equal to zero means the compositor let us choose
+        
+        if configure.new_size.0 != 0 {
+            layer.width = configure.new_size.0;
+        }
+        
+        if configure.new_size.1 != 0 {
+            layer.height = configure.new_size.1;
         }
 
         // Initiate the first draw.
-        if self.first_configure {
-            self.first_configure = false;
-            self.draw(qh);
+        if layer.first_configure {
+            layer.first_configure = false;
+            layer.draw(qh);
         }
     }
 }
 
-impl SeatHandler for SimpleLayer {
+impl SeatHandler for WLState {
     fn seat_state(&mut self) -> &mut SeatState {
         &mut self.seat_state
     }
@@ -303,54 +346,46 @@ impl SeatHandler for SimpleLayer {
     fn remove_seat(&mut self, _: &Connection, _: &QueueHandle<Self>, _: wl_seat::WlSeat) {}
 }
 
-impl ShmHandler for SimpleLayer {
-    fn shm_state(&mut self) -> &mut Shm {
-        &mut self.shm
-    }
-}
-
 impl SimpleLayer {
-    pub fn draw(&mut self, qh: &QueueHandle<Self>) {
+    pub fn draw(&mut self, qh: &QueueHandle<WLState>) {
         let width = self.width;
         let height = self.height;
 
-        // Draw to the window:
-        unsafe {
-            gl::ClearColor(1.0,1.0,1.0,1.0);
-            gl::Clear(COLOR_BUFFER_BIT);
-            gl::Flush();
+        // Attach the egl context to the current surface
+        self.egl_state.attach_context(self.egl_window_surface);
 
-            self.mpv_renderer.as_mut().unwrap().render_context.render::<Context>(0, self.width as i32, self.height as i32, true).unwrap();
+        // Draw to the window:
+        {
+            unsafe {
+                gl::ClearColor(1.0, 1.0, 1.0, 1.0);
+                gl::Clear(COLOR_BUFFER_BIT);
+            }
+
+            self.mpv_renderer.render_context.render::<Context>(0, self.width as i32, self.height as i32, true).unwrap();
         }
 
-        self.egl_state.egl.make_current(
-            self.egl_state.egl_display,
-            Some(self.egl_window_surface),
-            Some(self.egl_window_surface),
-            Some(self.egl_state.egl_context),
-        ).unwrap();
-
-        // Damage the entire window
+        // Damage the entire window and swap buffers
         self.layer.wl_surface().damage_buffer(0, 0, width as i32, height as i32);
+        self.egl_state.egl.swap_buffers(self.egl_state.egl_display, self.egl_window_surface).unwrap();
+
+        // Now that buffers are swapped we can reset the egl context
+        self.egl_state.detach_context();
 
         // Request our next frame
         self.layer.wl_surface().frame(qh, self.layer.wl_surface().clone());
 
-        self.egl_state.egl.swap_buffers(self.egl_state.egl_display, self.egl_window_surface).unwrap();
-
-        // Attach and commit to present.
+        // Commit to present.
         self.layer.commit();
     }
 }
 
-delegate_compositor!(SimpleLayer);
-delegate_output!(SimpleLayer);
-delegate_shm!(SimpleLayer);
-delegate_seat!(SimpleLayer);
-delegate_layer!(SimpleLayer);
-delegate_registry!(SimpleLayer);
+delegate_compositor!(WLState);
+delegate_output!(WLState);
+delegate_seat!(WLState);
+delegate_layer!(WLState);
+delegate_registry!(WLState);
 
-impl ProvidesRegistryState for SimpleLayer {
+impl ProvidesRegistryState for WLState {
     fn registry(&mut self) -> &mut RegistryState {
         &mut self.registry_state
     }

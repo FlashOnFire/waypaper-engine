@@ -1,6 +1,5 @@
 use std::path::PathBuf;
 use std::rc::Rc;
-use std::sync::Arc;
 use khronos_egl::{Instance, Static};
 use libmpv2::{FileState, Mpv};
 use libmpv2::render::{OpenGLInitParams, RenderContext, RenderParam, RenderParamApiType};

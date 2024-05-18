@@ -2,7 +2,6 @@ mod wallpaper;
 mod project;
 mod scene;
 mod wl_renderer;
-mod list_outputs;
 mod mpv;
 mod egl;
 
@@ -14,9 +13,7 @@ use std::rc::Rc;
 use std::str::FromStr;
 use smithay_client_toolkit::reexports::client::Connection;
 use crate::egl::EGLState;
-use crate::list_outputs::ListOutputs;
 use crate::project::WEProject;
-use crate::scene::ScenePackage;
 use crate::wallpaper::Wallpaper;
 use crate::wl_renderer::WLState;
 
@@ -51,39 +48,18 @@ fn main() -> Result<(), Box<dyn Error>> {
         wallpapers.push(wp);
     };
 
-    let wp = wallpapers.iter()
-        .find(|w|
-            matches!(w, Wallpaper::Scene { .. })
-        ).unwrap();
-
-    if let Wallpaper::Scene { project } = wp {
-        println!("{:?}", wp);
-
-        let path = Path::new(WP_DIR).join(project.workshop_id.unwrap().to_string()).join("scene.pkg");
-
-        if path.exists() {
-            println!("Found scene.pkg file ! (Path : {:?})", path);
-
-            let scene = ScenePackage::from(&path)?;
-            scene.save_to_disk(&Path::new("./scene").to_path_buf())?;
-        }
-    }
-
     let conn = Rc::new(Connection::connect_to_env().unwrap());
+    let egl_state = Rc::new(EGLState::new(&conn));
+    let mut state = WLState::new(conn.clone(), egl_state.clone());
 
-    let mut list_outputs = ListOutputs::new(&conn);
-    let outputs = list_outputs.get_outputs();
+    
+    let outputs = state.get_outputs();
     outputs.print_outputs();
     let output = outputs.iter().find(|output| output.1.name.as_ref().unwrap() == "DP-3").unwrap();
-
-    /*let wp = wallpapers.iter()
-        .filter(|w|
-            matches!(w, Wallpaper::Video { .. })
-        ).nth(7)
-        .unwrap();*/
+    let output2 = outputs.iter().find(|output| output.1.name.as_ref().unwrap() == "DP-1").unwrap();
 
     let wp = wallpapers.iter().find(|wp| match wp {
-        Wallpaper::Video {project} => {
+        Wallpaper::Video { project } => {
             project.workshop_id.unwrap() == 3212120834
         }
         _ => false
@@ -97,12 +73,13 @@ fn main() -> Result<(), Box<dyn Error>> {
         if path.exists() {
             println!("Found video file ! (Path : {:?})", path);
 
-            let egl_state = Rc::new(EGLState::new(&conn));
 
-            let mut state = WLState::new(conn, output, path, egl_state);
+            state.setup_layer(output, path.clone());
+            state.setup_layer(output2, path.clone());
+
             state.loop_fn();
         }
     }
-    
+
     Ok(())
 }

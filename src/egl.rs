@@ -1,6 +1,6 @@
 use std::ffi::c_void;
 use std::rc::Rc;
-use khronos_egl::{Config, Context, Display, Instance, Static};
+use khronos_egl::{Config, Context, Display, Instance, Static, Surface};
 use smithay_client_toolkit::reexports::client::Connection;
 
 use khronos_egl as egl;
@@ -51,7 +51,7 @@ impl EGLState {
                 .expect("Could not create context");
 
             gl::load_with(|str| get_proc_address(&egl, str));
-            
+
             EGLState {
                 egl,
                 egl_display,
@@ -59,5 +59,23 @@ impl EGLState {
                 config,
             }
         }
+    }
+
+    pub fn attach_context(&self, surface: Surface) {
+        self.egl.make_current(
+            self.egl_display,
+            Some(surface),
+            Some(surface),
+            Some(self.egl_context),
+        ).unwrap()
+    }
+
+    pub fn detach_context(&self) {
+        self.egl.make_current(
+            self.egl_display,
+            None,
+            None,
+            None,
+        ).unwrap()
     }
 }
