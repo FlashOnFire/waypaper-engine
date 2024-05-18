@@ -111,7 +111,7 @@ impl WLState {
             //keyboard_focus: false,
             //pointer: None,
             mpv_renderer: None,
-            egl_state,
+            egl_state: egl_state.clone(),
             _wl_egl_surface: wl_egl_surface,
             egl_window_surface,
         };
@@ -127,7 +127,7 @@ impl WLState {
             simple_layer,
         };
 
-        let mpv_renderer = MpvRenderer::new(connection, file);
+        let mpv_renderer = MpvRenderer::new(connection, egl_state.egl.clone(), file);
 
         wl_state.simple_layer.mpv_renderer = Some(mpv_renderer);
 

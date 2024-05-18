@@ -1,15 +1,16 @@
 use std::ffi::c_void;
+use std::rc::Rc;
 use khronos_egl::{Config, Context, Display, Instance, Static};
 use smithay_client_toolkit::reexports::client::Connection;
 
 use khronos_egl as egl;
 
-pub fn get_proc_address(egl: &Instance<Static>, name: &str) -> *mut c_void {
+pub fn get_proc_address(egl: &Rc<Instance<Static>>, name: &str) -> *mut c_void {
     egl.get_proc_address(name).unwrap() as *mut c_void
 }
 
 pub struct EGLState {
-    pub(crate) egl: Instance<Static>,
+    pub(crate) egl: Rc<Instance<Static>>,
     pub(crate) egl_display: Display,
     pub(crate) egl_context: Context,
     pub(crate) config: Config,
@@ -17,7 +18,7 @@ pub struct EGLState {
 
 impl EGLState {
     pub fn new(connection: &Connection) -> Self {
-        let egl = Instance::new(Static);
+        let egl = Rc::new(Instance::new(Static));
 
         unsafe {
             let egl_display = egl.get_display(connection.backend().display_ptr() as *mut c_void).unwrap();

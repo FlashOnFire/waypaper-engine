@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 use std::rc::Rc;
+use std::sync::Arc;
 use khronos_egl::{Instance, Static};
 use libmpv2::{FileState, Mpv};
 use libmpv2::render::{OpenGLInitParams, RenderContext, RenderParam, RenderParamApiType};
@@ -14,14 +15,12 @@ pub struct MpvRenderer {
 }
 
 impl MpvRenderer {
-    pub fn new(connection: Rc<Connection>, file: PathBuf) -> Self {
-        let egl = Instance::new(Static);
-
+    pub fn new(connection: Rc<Connection>, egl: Rc<Instance<Static>>, file: PathBuf) -> Self {
         let mut mpv = Mpv::new().expect("Error while creating mpv");
 
         // Setting various properties
         mpv.set_property("terminal", "yes").unwrap(); // Logs in term
-        mpv.set_property("msg-level", "all=v").unwrap(); // Verbose logs
+        //mpv.set_property("msg-level", "all=v").unwrap(); // Verbose logs
         mpv.set_property("input-cursor", "no").unwrap(); // No cursor
         mpv.set_property("cursor-autohide", "no").unwrap(); // No cursor hiding
         mpv.set_property("config", "no").unwrap(); // Disable config loading
