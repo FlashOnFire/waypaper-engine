@@ -127,9 +127,6 @@ impl WLState {
 
         self.egl_state.attach_context(egl_window_surface);
 
-        //let mpv_renderer = MpvRenderer::new(self.connection.clone(), self.egl_state.egl.clone());
-        //mpv_renderer.play_file(file);
-
         let simple_layer = SimpleLayer {
             exit: false,
             first_configure: true,
