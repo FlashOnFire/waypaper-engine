@@ -7,20 +7,28 @@ use smithay_client_toolkit::output::OutputInfo;
 use smithay_client_toolkit::reexports::client::protocol::wl_output::WlOutput;
 
 use crate::project::WEProject;
+use crate::scene_package::ScenePackage;
 use crate::wallpaper::Wallpaper;
 use crate::wl_renderer::{SimpleLayer, WLState};
 
 mod wallpaper;
 mod project;
-mod scene;
+mod scene_package;
 mod wl_renderer;
 mod mpv;
 mod egl;
+mod scene_renderer;
+mod scene;
+mod tex_file;
+mod file_reading_utils;
 
 const WP_DIR: &str = "/home/flashonfire/.steam/steam/steamapps/workshop/content/431960/";
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let mut state = WLState::new();
+    tex_file::TexFile::new(Path::new("/home/flashonfire/RustroverProjects/waypaper-engine/scene/materials/wallhaven-543465.tex")).unwrap();
+    
+    
+    /*let mut state = WLState::new();
     
     let path = Path::new(WP_DIR).join("1195491399");
 
@@ -48,7 +56,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
             state.loop_fn();
         }
-    }
+    }*/
 
     Ok(())
 }
