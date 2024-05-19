@@ -15,6 +15,7 @@ pub struct MpvRenderer {
     mpv: Mpv,
     video_path: PathBuf,
     pub render_context: Option<RenderContext>,
+    started_playback: bool,
 }
 
 impl MpvRenderer {
@@ -40,6 +41,7 @@ impl MpvRenderer {
             mpv,
             video_path,
             render_context: None,
+            started_playback: false,
         }
     }
 
@@ -57,8 +59,6 @@ impl MpvRenderer {
                 ],
             ).unwrap());
         }
-        
-        self.play_file(&self.video_path);
     }
     pub fn play_file(&self, file: &Path) {
         self.mpv.playlist_load_files(&[(file.to_str().unwrap(), FileState::Replace, None)]).unwrap();
@@ -69,8 +69,9 @@ impl MpvRenderer {
     }
 
     pub fn render(&mut self, width: u32, height: u32) {
-        if self.render_context.is_none() {
-            self.init_rendering_context();
+        if !self.started_playback {
+            self.play_file(&self.video_path);
+            self.started_playback = true;
         }
         
         self.render_context.as_ref().unwrap().render::<Context>(0, width as i32, height as i32, true).unwrap()

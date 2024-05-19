@@ -1,9 +1,8 @@
-use std::cell::RefCell;
 use std::collections::HashMap;
 use std::ops::{Deref, DerefMut};
 use std::rc::Rc;
-use fps_counter::FPSCounter;
 
+use fps_counter::FPSCounter;
 use gl::COLOR_BUFFER_BIT;
 use khronos_egl::{ATTRIB_NONE, Surface};
 use smithay_client_toolkit::{
@@ -35,11 +34,67 @@ use wayland_egl::WlEglSurface;
 use crate::egl::EGLState;
 use crate::wallpaper::Wallpaper;
 
+pub struct RenderingContext {
+    pub(crate) connection: Rc<Connection>,
+    pub(crate) egl_state: Rc<EGLState>,
+    event_queue: EventQueue<WLState>,
+    wl_state: WLState,
+}
+
+impl RenderingContext {
+    pub fn new() -> RenderingContext {
+        let connection = Rc::new(Connection::connect_to_env().unwrap());
+        let egl_state = Rc::new(EGLState::new(&connection));
+        let (globals, event_queue): (GlobalList, EventQueue<WLState>) = registry_queue_init(&connection).unwrap();
+        let queue_handle = event_queue.handle();
+
+        let wl_state = WLState::new(connection.clone(), egl_state.clone(), &globals, queue_handle);
+
+        RenderingContext {
+            connection,
+            egl_state,
+            event_queue,
+            wl_state,
+        }
+    }
+    pub fn loop_fn(&mut self) {
+        loop {
+            self.event_queue.blocking_dispatch(&mut self.wl_state).unwrap();
+
+            if self.wl_state.layers.values().any(|layer| layer.exit) {
+                println!("Exiting");
+                break;
+            }
+        }
+    }
+
+    pub fn get_outputs(&mut self) -> OutputsList {
+        self.event_queue.roundtrip(&mut self.wl_state).unwrap();
+
+        OutputsList(self.wl_state.output_state.outputs().map(|output| (output.clone(), self.wl_state.output_state.info(&output).unwrap())).collect())
+    }
+
+    pub(crate) fn set_wallpaper(&mut self, output: (&WlOutput, &OutputInfo), mut wallpaper: Wallpaper) {
+        let output_name = output.1.name.as_ref().unwrap();
+
+        let layer: &mut SimpleLayer = if !self.wl_state.layers.contains_key(&output_name.clone()) {
+            self.wl_state.setup_layer(output)
+        } else {
+            self.wl_state.layers.get_mut(output_name).unwrap()
+        };
+
+        self.egl_state.attach_context(layer.egl_window_surface);
+        wallpaper.init_render();
+        self.egl_state.detach_context();
+
+
+        layer.wallpaper = Some(wallpaper);
+    }
+}
+
 pub struct WLState {
     pub connection: Rc<Connection>,
     pub(crate) egl_state: Rc<EGLState>,
-    pub(crate) _globals: GlobalList,
-    pub(crate) event_queue: Rc<RefCell<EventQueue<WLState>>>,
     pub(crate) queue_handle: QueueHandle<WLState>,
     registry_state: RegistryState,
     output_state: OutputState,
@@ -51,13 +106,7 @@ pub struct WLState {
 }
 
 impl WLState {
-    pub fn new() -> Self {
-        let connection = Rc::new(Connection::connect_to_env().unwrap());
-        let egl_state = Rc::new(EGLState::new(&connection));
-
-        let (globals, event_queue) = registry_queue_init(&connection).unwrap();
-        let queue_handle = event_queue.handle();
-
+    pub fn new(connection: Rc<Connection>, egl_state: Rc<EGLState>, globals: &GlobalList, queue_handle: QueueHandle<WLState>) -> Self {
         WLState {
             connection,
             egl_state,
@@ -66,22 +115,9 @@ impl WLState {
             seat_state: SeatState::new(&globals, &queue_handle),
             compositor_state: CompositorState::bind(&globals, &queue_handle).expect("wl_compositor is not available"),
             layer_shell: LayerShell::bind(&globals, &queue_handle).expect("layer shell is not available"),
-            _globals: globals,
-            event_queue: Rc::new(RefCell::new(event_queue)),
             queue_handle,
 
             layers: HashMap::new(),
-        }
-    }
-
-    pub(crate) fn loop_fn(&mut self) {
-        loop {
-            self.event_queue.clone().borrow_mut().blocking_dispatch(self).unwrap();
-
-            if self.layers.values().any(|layer| layer.exit) {
-                println!("Exiting");
-                break;
-            }
         }
     }
 
@@ -151,12 +187,6 @@ impl WLState {
 
         self.layers.get_mut(&output_name).unwrap()
     }
-
-    pub fn get_outputs(&mut self) -> OutputsList {
-        self.event_queue.clone().borrow_mut().roundtrip(self).unwrap();
-
-        OutputsList(self.output_state.outputs().map(|output| (output.clone(), self.output_state.info(&output).unwrap())).collect())
-    }
 }
 
 pub struct OutputsList(HashMap<WlOutput, OutputInfo>);
@@ -203,7 +233,7 @@ pub struct SimpleLayer {
     //mpv_renderer: MpvRenderer,
     egl_state: Rc<EGLState>,
     _wl_egl_surface: WlEglSurface,
-    egl_window_surface: Surface,
+    pub(crate) egl_window_surface: Surface,
     output: (WlOutput, OutputInfo),
 
     pub(crate) wallpaper: Option<Wallpaper>,
@@ -371,7 +401,7 @@ impl SimpleLayer {
 
                 gl::ClearColor(clear_color.0, clear_color.1, clear_color.2, 1.0);
                 gl::Clear(COLOR_BUFFER_BIT);
-                
+
                 if let Some(wallpaper) = self.wallpaper.as_mut() {
                     wallpaper.render(self.width, self.height);
                 }
