@@ -73,14 +73,14 @@ pub enum ContainerVersion {
     TEXB003,
 }
 
-impl TryFrom<u32> for ContainerVersion {
+impl TryFrom<&str> for ContainerVersion {
     type Error = ();
 
-    fn try_from(value: u32) -> Result<Self, Self::Error> {
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
         Ok(match value {
-            1 => ContainerVersion::TEXB001,
-            2 => ContainerVersion::TEXB002,
-            3 => ContainerVersion::TEXB003,
+            "TEXB0001" => ContainerVersion::TEXB001,
+            "TEXB0002" => ContainerVersion::TEXB002,
+            "TEXB0003" => ContainerVersion::TEXB003,
             _ => return Err(()),
         })
     }
@@ -163,9 +163,8 @@ fn read_header(data: &mut Cursor<Vec<u8>>) -> Header {
 fn read_container_data(data: &mut Cursor<Vec<u8>>) -> ContainerData {
     let container_version_str = read_null_terminated_str(data);
     println!("Container version: {container_version_str}");
-
-    assert!(container_version_str == "TEXB0001" || container_version_str == "TEXB0002" || container_version_str == "TEXB0003");
-    let version = ContainerVersion::try_from(container_version_str.chars().last().unwrap().to_digit(10).unwrap()).unwrap();
+    
+    let version = ContainerVersion::try_from(container_version_str.as_str()).unwrap();
 
     let unknown_data = read_u32(data);
     let freeimage_format = match version {
