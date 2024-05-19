@@ -3,7 +3,7 @@ use std::fs::File;
 use std::path::Path;
 use crate::mpv::MpvRenderer;
 use crate::project::{WEProject, WallpaperType};
-use crate::scene::ScenePackage;
+use crate::scene_package::ScenePackage;
 use crate::wallpaper::Wallpaper::Video;
 use crate::wl_renderer::WLState;
 
@@ -26,7 +26,7 @@ impl Wallpaper {
 
                 Video { project, mpv_renderer }
             }
-            WallpaperType::Scene => Wallpaper::Scene { project, scene_package: ScenePackage::from(&path.join("scene.pkg")).unwrap() },
+            WallpaperType::Scene => Wallpaper::Scene { project, scene_package: ScenePackage::new(&path.join("scene.pkg")).unwrap() },
             WallpaperType::Web => Wallpaper::Web { project },
             WallpaperType::Preset => Wallpaper::Preset { project }
         })
