@@ -18,12 +18,12 @@ impl TryFrom<u32> for TextureFormat {
 
     fn try_from(value: u32) -> Result<Self, Self::Error> {
         Ok(match value {
-            0 => TextureFormat::RGBA8888,
-            4 => TextureFormat::DXT5,
-            6 => TextureFormat::DXT3,
-            7 => TextureFormat::DXT1,
-            8 => TextureFormat::RG88,
-            9 => TextureFormat::R8,
+            0 => Self::RGBA8888,
+            4 => Self::DXT5,
+            6 => Self::DXT3,
+            7 => Self::DXT1,
+            8 => Self::RG88,
+            9 => Self::R8,
             _ => return Err(()),
         })
     }
@@ -42,10 +42,10 @@ impl TryFrom<u32> for TextureFlags {
 
     fn try_from(value: u32) -> Result<Self, Self::Error> {
         Ok(match value {
-            0 => TextureFlags::None,
-            1 => TextureFlags::NoInterpolation,
-            2 => TextureFlags::ClampUVs,
-            4 => TextureFlags::IsGIF,
+            0 => Self::None,
+            1 => Self::NoInterpolation,
+            2 => Self::ClampUVs,
+            4 => Self::IsGIF,
             _ => return Err(()),
         })
     }
@@ -78,9 +78,9 @@ impl TryFrom<&str> for ContainerVersion {
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         Ok(match value {
-            "TEXB0001" => ContainerVersion::TEXB001,
-            "TEXB0002" => ContainerVersion::TEXB002,
-            "TEXB0003" => ContainerVersion::TEXB003,
+            "TEXB0001" => Self::TEXB001,
+            "TEXB0002" => Self::TEXB002,
+            "TEXB0003" => Self::TEXB003,
             _ => return Err(()),
         })
     }
@@ -143,8 +143,8 @@ fn read_header(data: &mut Cursor<Vec<u8>>) -> Header {
     let unknown_funny_number = read_u32(data);
 
     println!("Texture info:");
-    println!("\tFormat: {:?}", format);
-    println!("\tFlags: {:?}", flags);
+    println!("\tFormat: {format:?}");
+    println!("\tFlags: {flags:?}");
     println!("\tTexture Size: {texture_width}x{texture_height}");
     println!("\tImage Size: {image_width}x{image_height}");
     println!("\tUnknown funny number: {unknown_funny_number}");
@@ -185,9 +185,9 @@ fn read_container_data(data: &mut Cursor<Vec<u8>>) -> ContainerData {
 
     ContainerData {
         version,
+        unknown_data,
         freeimage_format,
         mipmap_levels,
-        unknown_data,
     }
 }
 
@@ -221,7 +221,7 @@ fn read_mipmap(cursor: &mut Cursor<Vec<u8>>, container_version: &ContainerVersio
     println!("\tImage Size: {image_size}", );
 
     let mut bytes = vec![];
-    cursor.take(image_size as u64).read_to_end(&mut bytes).unwrap();
+    cursor.take(u64::from(image_size)).read_to_end(&mut bytes).unwrap();
 
     MipmapEntry {
         width,

@@ -42,7 +42,7 @@ pub struct RenderingContext {
 }
 
 impl RenderingContext {
-    pub fn new() -> RenderingContext {
+    pub fn new() -> Self {
         let connection = Rc::new(Connection::connect_to_env().unwrap());
         let egl_state = Rc::new(EGLState::new(&connection));
         let (globals, event_queue): (GlobalList, EventQueue<WLState>) = registry_queue_init(&connection).unwrap();
@@ -50,7 +50,7 @@ impl RenderingContext {
 
         let wl_state = WLState::new(connection.clone(), egl_state.clone(), &globals, queue_handle);
 
-        RenderingContext {
+        Self {
             connection,
             egl_state,
             event_queue,
@@ -77,10 +77,10 @@ impl RenderingContext {
     pub(crate) fn set_wallpaper(&mut self, output: (&WlOutput, &OutputInfo), mut wallpaper: Wallpaper) {
         let output_name = output.1.name.as_ref().unwrap();
 
-        let layer: &mut SimpleLayer = if !self.wl_state.layers.contains_key(&output_name.clone()) {
-            self.wl_state.setup_layer(output)
-        } else {
+        let layer: &mut SimpleLayer = if self.wl_state.layers.contains_key(&output_name.clone()) {
             self.wl_state.layers.get_mut(output_name).unwrap()
+        } else {
+            self.wl_state.setup_layer(output)
         };
 
         self.egl_state.attach_context(layer.egl_window_surface);
@@ -106,15 +106,15 @@ pub struct WLState {
 }
 
 impl WLState {
-    pub fn new(connection: Rc<Connection>, egl_state: Rc<EGLState>, globals: &GlobalList, queue_handle: QueueHandle<WLState>) -> Self {
-        WLState {
+    pub fn new(connection: Rc<Connection>, egl_state: Rc<EGLState>, globals: &GlobalList, queue_handle: QueueHandle<Self>) -> Self {
+        Self {
             connection,
             egl_state,
-            registry_state: RegistryState::new(&globals),
-            output_state: OutputState::new(&globals, &queue_handle),
-            seat_state: SeatState::new(&globals, &queue_handle),
-            compositor_state: CompositorState::bind(&globals, &queue_handle).expect("wl_compositor is not available"),
-            layer_shell: LayerShell::bind(&globals, &queue_handle).expect("layer shell is not available"),
+            registry_state: RegistryState::new(globals),
+            output_state: OutputState::new(globals, &queue_handle),
+            seat_state: SeatState::new(globals, &queue_handle),
+            compositor_state: CompositorState::bind(globals, &queue_handle).expect("wl_compositor is not available"),
+            layer_shell: LayerShell::bind(globals, &queue_handle).expect("layer shell is not available"),
             queue_handle,
 
             layers: HashMap::new(),
@@ -202,7 +202,7 @@ impl OutputsList {
             let scale = info.scale_factor;
 
             println!("Outputs :");
-            println!("\t- {:} : {}x{} - {}hz - {}", name, width, height, refresh_rate, scale);
+            println!("\t- {name} : {width}x{height} - {refresh_rate}hz - {scale}");
         }
     }
 }
@@ -409,7 +409,7 @@ impl SimpleLayer {
         }
 
         // Damage the entire window and swap buffers
-        self.layer.wl_surface().damage_buffer(0, 0, width as i32, height as i32);
+        self.layer.wl_surface().damage_buffer(0, 0, i32::try_from(width).unwrap(), i32::try_from(height).unwrap());
         self.egl_state.egl.swap_buffers(self.egl_state.egl_display, self.egl_window_surface).unwrap();
 
         // Now that buffers are swapped we can reset the egl context

@@ -24,7 +24,7 @@ impl AppState {
         
         let path = Path::new(WP_DIR).join("1195491399");
 
-        let mut wallpaper = Wallpaper::new(self.rendering_context.connection.clone(), self.rendering_context.egl_state.clone(), &path).unwrap();
+        let mut wallpaper = Wallpaper::new(self.rendering_context.connection.clone(), &self.rendering_context.egl_state, &path).unwrap();
         let filename = path.file_name().unwrap();
 
         match wallpaper {
@@ -42,7 +42,7 @@ impl AppState {
             let path = Path::new(WP_DIR).join(project.workshop_id.unwrap().to_string()).join(project.file.as_ref().unwrap());
 
             if path.exists() {
-                println!("Found video file ! (Path : {:?})", path);
+                println!("Found video file ! (Path : {path:?})");
 
                 self.rendering_context.set_wallpaper(output, wallpaper);
 

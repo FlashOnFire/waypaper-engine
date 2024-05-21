@@ -23,7 +23,7 @@ pub fn read_str(data: &mut Cursor<Vec<u8>>) -> String {
 
 fn read_sized_str(data: &mut Cursor<Vec<u8>>, size: u32) -> String {
     let mut bytes = vec![];
-    data.take(size as u64).read_to_end(&mut bytes).unwrap();
+    data.take(u64::from(size)).read_to_end(&mut bytes).unwrap();
 
     String::from_utf8(bytes).unwrap()
 }

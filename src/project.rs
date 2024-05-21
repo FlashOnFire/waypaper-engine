@@ -58,9 +58,9 @@ pub struct General {
 #[serde(rename_all = "camelCase")]
 pub struct Property {
     #[serde(default)]
-    pub order: i32,
+    pub order: i64,
     pub text: String,
-    pub index: Option<i32>,
+    pub index: Option<i64>,
 
     #[serde(flatten)]
     pub value: PropertyValue,
@@ -72,15 +72,15 @@ pub struct Property {
 pub enum PropertyValue {
     #[serde(deserialize_with = "from_str_color")]
     Color {
-        r: f32,
-        g: f32,
-        b: f32,
+        r: f64,
+        g: f64,
+        b: f64,
     },
     Slider {
-        min: f32,
-        max: f32,
-        precision: Option<f32>,
-        step: Option<f32>,
+        min: f64,
+        max: f64,
+        precision: Option<f64>,
+        step: Option<f64>,
 
         #[serde(deserialize_with = "as_f64")]
         value: f64,
@@ -145,26 +145,26 @@ pub struct Preset {
 pub enum PresetValue {
     #[serde(deserialize_with = "from_str_color")]
     Color {
-        r: f32,
-        g: f32,
-        b: f32,
+        r: f64,
+        g: f64,
+        b: f64,
     },
     Bool {
         value: bool,
     },
     Integer {
-        value: i32,
+        value: i64,
     },
 }
 
-fn from_str_color<'de, D>(deserializer: D) -> Result<(f32, f32, f32), D::Error>
+fn from_str_color<'de, D>(deserializer: D) -> Result<(f64, f64, f64), D::Error>
     where D: Deserializer<'de>,
 {
     let map: HashMap<String, String> = Deserialize::deserialize(deserializer)?;
     let s = map.get("value").ok_or(Error::missing_field("value"))?;
 
     let parts = s.split(' ')
-        .map(f32::from_str)
+        .map(f64::from_str)
         .map(|f|
             f.map_err(
                 Error::custom

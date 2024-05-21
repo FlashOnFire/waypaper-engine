@@ -42,6 +42,8 @@ impl ScenePackage {
     pub fn new(path: &Path) -> Result<Self, Box<dyn std::error::Error>> {
         println!("Unpacking Scene Package !");
 
+        assert!(path.exists() && path.is_file());
+
         let mut data: Cursor<Vec<u8>> = Cursor::new(fs::read(path)?);
         println!("Data Length : {}", data.get_ref().len());
         
@@ -57,7 +59,7 @@ impl ScenePackage {
             contents.insert(entry.name.clone(), read_file(&mut data, header_offset, entry));
         }
 
-        Ok(ScenePackage {
+        Ok(Self {
             contents,
         })
     }
@@ -101,7 +103,7 @@ fn read_files(data: &mut Cursor<Vec<u8>>, file_count: u32) -> Vec<FileEntry> {
             name: read_str(data),
             offset: read_u32(data),
             size: read_u32(data),
-        })
+        });
     }
 
     files
@@ -112,7 +114,7 @@ pub fn read_file(data: &mut Cursor<Vec<u8>>, header_offset: u64, file: &FileEntr
     data.set_position(header_offset + file.offset as u64);
     
     let mut content = vec![];
-    data.take(file.size as u64).read_to_end(&mut content).unwrap();
+    data.take(u64::from(file.size)).read_to_end(&mut content).unwrap();
 
     FileContent {
         name: file.name.clone(),

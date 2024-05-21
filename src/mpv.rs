@@ -35,7 +35,7 @@ impl MpvRenderer {
         mpv.set_property("loop", "inf").unwrap(); // Play video in loop
 
 
-        MpvRenderer {
+        Self {
             connection,
             egl,
             mpv,
@@ -65,7 +65,7 @@ impl MpvRenderer {
     }
 
     pub fn set_speed(&self, speed: f32) {
-        self.mpv.set_property("speed", format!("{:.2}", speed)).unwrap()
+        self.mpv.set_property("speed", format!("{speed:.2}")).unwrap();
     }
 
     pub fn render(&mut self, width: u32, height: u32) {
@@ -74,6 +74,6 @@ impl MpvRenderer {
             self.started_playback = true;
         }
         
-        self.render_context.as_ref().unwrap().render::<Context>(0, width as i32, height as i32, true).unwrap()
+        self.render_context.as_ref().unwrap().render::<Context>(0, i32::try_from(width).unwrap() as i32, height as i32, true).unwrap()
     }
 }

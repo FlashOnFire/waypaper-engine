@@ -52,7 +52,7 @@ impl EGLState {
 
             gl::load_with(|str| get_proc_address(&egl, str));
 
-            EGLState {
+            Self {
                 egl,
                 egl_display,
                 egl_context,
@@ -67,7 +67,7 @@ impl EGLState {
             Some(surface),
             Some(surface),
             Some(self.egl_context),
-        ).unwrap()
+        ).unwrap();
     }
 
     pub fn detach_context(&self) {
@@ -76,6 +76,6 @@ impl EGLState {
             None,
             None,
             None,
-        ).unwrap()
+        ).unwrap();
     }
 }
