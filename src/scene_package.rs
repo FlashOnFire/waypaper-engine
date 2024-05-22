@@ -1,8 +1,8 @@
-use std::{fs, io};
 use std::collections::HashMap;
 use std::fs::create_dir_all;
 use std::io::{Cursor, Read, Seek};
 use std::path::{Path, PathBuf};
+use std::{fs, io};
 
 use crate::file_reading_utils::{read_str, read_u32};
 
@@ -46,22 +46,23 @@ impl ScenePackage {
 
         let mut data: Cursor<Vec<u8>> = Cursor::new(fs::read(path)?);
         println!("Data Length : {}", data.get_ref().len());
-        
+
         let file_count = read_header(&mut data);
 
         let files = read_files(&mut data, file_count);
 
         let mut contents: HashMap<String, FileContent> = HashMap::new();
-        
+
         let header_offset = data.position();
         for entry in &files {
             println!("\t{} - {} - {}", entry.name, entry.offset, entry.size);
-            contents.insert(entry.name.clone(), read_file(&mut data, header_offset, entry));
+            contents.insert(
+                entry.name.clone(),
+                read_file(&mut data, header_offset, entry),
+            );
         }
 
-        Ok(Self {
-            contents,
-        })
+        Ok(Self { contents })
     }
 
     pub fn save_to_disk(&self, dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
@@ -112,9 +113,11 @@ fn read_files(data: &mut Cursor<Vec<u8>>, file_count: u32) -> Vec<FileEntry> {
 pub fn read_file(data: &mut Cursor<Vec<u8>>, header_offset: u64, file: &FileEntry) -> FileContent {
     data.rewind().unwrap();
     data.set_position(header_offset + file.offset as u64);
-    
+
     let mut content = vec![];
-    data.take(u64::from(file.size)).read_to_end(&mut content).unwrap();
+    data.take(u64::from(file.size))
+        .read_to_end(&mut content)
+        .unwrap();
 
     FileContent {
         name: file.name.clone(),

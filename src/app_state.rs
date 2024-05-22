@@ -3,10 +3,10 @@ use std::ffi::OsStr;
 use std::path::Path;
 use std::str::FromStr;
 
-use crate::{tex_file, WP_DIR};
 use crate::project::WEProject;
 use crate::wallpaper::Wallpaper;
 use crate::wl_renderer::RenderingContext;
+use crate::{tex_file, WP_DIR};
 
 pub struct AppState {
     rendering_context: RenderingContext,
@@ -21,25 +21,39 @@ impl AppState {
 
     pub fn run(&mut self) -> Result<(), Box<dyn Error>> {
         //tex_file::TexFile::new(Path::new("/home/flashonfire/RustroverProjects/waypaper-engine/tests/scene/materials/wallhaven-543465.tex")).unwrap();
-        
+
         let path = Path::new(WP_DIR).join("1195491399");
 
-        let mut wallpaper = Wallpaper::new(self.rendering_context.connection.clone(), &self.rendering_context.egl_state, &path).unwrap();
+        let mut wallpaper = Wallpaper::new(
+            self.rendering_context.connection.clone(),
+            &self.rendering_context.egl_state,
+            &path,
+        )
+        .unwrap();
         let filename = path.file_name().unwrap();
 
         match wallpaper {
-            Wallpaper::Video { ref mut project, .. } => add_id(project, filename)?,
-            Wallpaper::Scene { ref mut project, .. } => add_id(project, filename)?,
+            Wallpaper::Video {
+                ref mut project, ..
+            } => add_id(project, filename)?,
+            Wallpaper::Scene {
+                ref mut project, ..
+            } => add_id(project, filename)?,
             Wallpaper::Web { ref mut project } => add_id(project, filename)?,
             Wallpaper::Preset { ref mut project } => add_id(project, filename)?,
         }
 
         let outputs = self.rendering_context.get_outputs();
         outputs.print_outputs();
-        let output = outputs.iter().find(|output| output.1.name.as_ref().unwrap() == "DP-3").unwrap();
+        let output = outputs
+            .iter()
+            .find(|output| output.1.name.as_ref().unwrap() == "DP-3")
+            .unwrap();
 
         if let Wallpaper::Video { ref project, .. } = wallpaper {
-            let path = Path::new(WP_DIR).join(project.workshop_id.unwrap().to_string()).join(project.file.as_ref().unwrap());
+            let path = Path::new(WP_DIR)
+                .join(project.workshop_id.unwrap().to_string())
+                .join(project.file.as_ref().unwrap());
 
             if path.exists() {
                 println!("Found video file ! (Path : {path:?})");

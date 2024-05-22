@@ -30,6 +30,6 @@ fn read_sized_str(data: &mut Cursor<Vec<u8>>, size: u32) -> String {
 
 pub(crate) fn read_color(data: &mut Cursor<Vec<u8>>) -> (u8, u8, u8, u8) {
     let number = read_u32(data);
-    
+
     number.to_le_bytes().try_into().unwrap()
 }

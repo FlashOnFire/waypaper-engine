@@ -1,7 +1,7 @@
-use std::ffi::c_void;
-use std::rc::Rc;
 use khronos_egl::{Config, Context, Display, Instance, Static, Surface};
 use smithay_client_toolkit::reexports::client::Connection;
+use std::ffi::c_void;
+use std::rc::Rc;
 
 use khronos_egl as egl;
 
@@ -21,24 +21,28 @@ impl EGLState {
         let egl = Rc::new(Instance::new(Static));
 
         unsafe {
-            let egl_display = egl.get_display(connection.backend().display_ptr() as *mut c_void).unwrap();
+            let egl_display = egl
+                .get_display(connection.backend().display_ptr() as *mut c_void)
+                .unwrap();
             egl.initialize(egl_display).unwrap();
 
+            #[rustfmt::skip]
             let attributes = [
                 egl::RED_SIZE, 8,
                 egl::GREEN_SIZE, 8,
                 egl::BLUE_SIZE, 8,
                 egl::RENDERABLE_TYPE, egl::OPENGL_BIT,
-                egl::NONE
+                egl::NONE,
             ];
 
             egl.bind_api(egl::OPENGL_API).unwrap();
 
+            #[rustfmt::skip]
             let context_attributes = [
                 egl::CONTEXT_MAJOR_VERSION, 4,
                 egl::CONTEXT_MINOR_VERSION, 6,
                 egl::CONTEXT_OPENGL_PROFILE_MASK, egl::CONTEXT_OPENGL_CORE_PROFILE_BIT,
-                egl::NONE
+                egl::NONE,
             ];
 
             let config = egl
@@ -62,20 +66,19 @@ impl EGLState {
     }
 
     pub fn attach_context(&self, surface: Surface) {
-        self.egl.make_current(
-            self.egl_display,
-            Some(surface),
-            Some(surface),
-            Some(self.egl_context),
-        ).unwrap();
+        self.egl
+            .make_current(
+                self.egl_display,
+                Some(surface),
+                Some(surface),
+                Some(self.egl_context),
+            )
+            .unwrap();
     }
 
     pub fn detach_context(&self) {
-        self.egl.make_current(
-            self.egl_display,
-            None,
-            None,
-            None,
-        ).unwrap();
+        self.egl
+            .make_current(self.egl_display, None, None, None)
+            .unwrap();
     }
 }

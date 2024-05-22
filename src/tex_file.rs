@@ -1,8 +1,8 @@
+use crate::file_reading_utils::{read_color, read_null_terminated_str, read_u32};
+use bitflags::bitflags;
 use std::fs;
 use std::io::{Cursor, Read};
 use std::path::Path;
-use bitflags::bitflags;
-use crate::file_reading_utils::{read_null_terminated_str, read_u32, read_color};
 
 #[derive(Debug, Clone)]
 pub enum TextureFormat {
@@ -151,17 +151,13 @@ fn read_header(data: &mut Cursor<Vec<u8>>) -> Header {
 fn read_container_data(data: &mut Cursor<Vec<u8>>) -> ContainerData {
     let container_version_str = read_null_terminated_str(data);
     println!("Container version: {container_version_str}");
-    
+
     let version = ContainerVersion::try_from(container_version_str.as_str()).unwrap();
 
     let unknown_data = read_u32(data);
     let freeimage_format = match version {
-        ContainerVersion::TEXB001 | ContainerVersion::TEXB002 => {
-            None
-        }
-        ContainerVersion::TEXB003 => {
-            Some(read_u32(data))
-        }
+        ContainerVersion::TEXB001 | ContainerVersion::TEXB002 => None,
+        ContainerVersion::TEXB003 => Some(read_u32(data)),
     };
     let mipmap_levels = read_u32(data);
 
@@ -203,13 +199,19 @@ fn read_mipmap(cursor: &mut Cursor<Vec<u8>>, container_version: &ContainerVersio
     println!("\tIs Compressed: {is_compressed}");
 
     if is_compressed {
-        println!("\tImage Size Uncompressed: {}", image_size_uncompressed.unwrap());
+        println!(
+            "\tImage Size Uncompressed: {}",
+            image_size_uncompressed.unwrap()
+        );
     }
 
-    println!("\tImage Size: {image_size}", );
+    println!("\tImage Size: {image_size}",);
 
     let mut bytes = vec![];
-    cursor.take(u64::from(image_size)).read_to_end(&mut bytes).unwrap();
+    cursor
+        .take(u64::from(image_size))
+        .read_to_end(&mut bytes)
+        .unwrap();
 
     MipmapEntry {
         width,

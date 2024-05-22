@@ -1,9 +1,5 @@
-struct Scene {
-    
-}
+struct Scene {}
 
 impl Scene {
-    pub fn new() {
-        
-    }
+    pub fn new() {}
 }
