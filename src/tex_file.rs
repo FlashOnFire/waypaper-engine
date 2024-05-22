@@ -1,5 +1,6 @@
 use crate::file_reading_utils::{read_color, read_null_terminated_str, read_u32};
 use bitflags::bitflags;
+
 use std::fs;
 use std::io::{Cursor, Read};
 use std::path::Path;
@@ -41,9 +42,8 @@ bitflags! {
 
 pub struct ContainerData {
     version: ContainerVersion,
-    unknown_data: u32,
+    image_count: u32,
     freeimage_format: Option<u32>,
-    mipmap_levels: u32,
 }
 
 pub struct MipmapEntry {
@@ -87,7 +87,7 @@ pub struct Header {
 pub struct TexFile {
     header: Header,
     container_data: ContainerData,
-    mipmap_entries: Vec<MipmapEntry>,
+    images: Vec<Vec<MipmapEntry>>,
 }
 
 impl TexFile {
@@ -100,16 +100,26 @@ impl TexFile {
         let header = read_header(&mut data);
         let container_data = read_container_data(&mut data);
 
-        let mut mipmap_entries = vec![];
-        for i in 0..container_data.mipmap_levels {
-            println!("Reading Mipmap {i} :");
-            mipmap_entries.push(read_mipmap(&mut data, &container_data.version));
+        let mut images = vec![];
+
+        for image in 0..container_data.image_count {
+            println!("Reading Image {image}: ");
+
+            let mipmap_count = read_u32(&mut data);
+            let mut mipmap_entries = vec![];
+
+            for i in 0..mipmap_count {
+                println!("\tReading Mipmap {i} :");
+                mipmap_entries.push(read_mipmap(&mut data, &container_data.version));
+            }
+
+            images.push(mipmap_entries);
         }
 
         Ok(Self {
             header,
             container_data,
-            mipmap_entries,
+            images,
         })
     }
 }
@@ -154,24 +164,21 @@ fn read_container_data(data: &mut Cursor<Vec<u8>>) -> ContainerData {
 
     let version = ContainerVersion::try_from(container_version_str.as_str()).unwrap();
 
-    let unknown_data = read_u32(data);
+    let image_count = read_u32(data);
     let freeimage_format = match version {
         ContainerVersion::TEXB001 | ContainerVersion::TEXB002 => None,
         ContainerVersion::TEXB003 => Some(read_u32(data)),
     };
-    let mipmap_levels = read_u32(data);
 
-    println!("\tUnknown funny number 2: {unknown_data}");
+    println!("\tImage Count: {image_count}");
     if let Some(format) = freeimage_format {
         println!("\tFreeimage Format: {format}");
     }
-    println!("\tMipmap levels: {mipmap_levels}");
 
     ContainerData {
         version,
-        unknown_data,
+        image_count,
         freeimage_format,
-        mipmap_levels,
     }
 }
 
@@ -194,18 +201,18 @@ fn read_mipmap(cursor: &mut Cursor<Vec<u8>>, container_version: &ContainerVersio
 
     let image_size = read_u32(cursor);
 
-    println!("\tWidth: {width}");
-    println!("\tHeight: {height}");
-    println!("\tIs Compressed: {is_compressed}");
+    println!("\t\tWidth: {width}");
+    println!("\t\tHeight: {height}");
+    println!("\t\tIs Compressed: {is_compressed}");
 
     if is_compressed {
         println!(
-            "\tImage Size Uncompressed: {}",
+            "\t\tImage Size Uncompressed: {}",
             image_size_uncompressed.unwrap()
         );
     }
 
-    println!("\tImage Size: {image_size}",);
+    println!("\t\tImage Size: {image_size}",);
 
     let mut bytes = vec![];
     cursor
