@@ -123,7 +123,7 @@ fn read_header(data: &mut Cursor<Vec<u8>>) -> Header {
     println!("{version} - {version2}");
 
     let format = TextureFormat::try_from(read_u32(data)).unwrap();
-    let flags = TextureFlags::from_bits(read_u32(data)).unwrap(); // TODO: Flags can probably be combined
+    let flags = TextureFlags::from_bits(read_u32(data)).unwrap();
     let texture_width = read_u32(data);
     let texture_height = read_u32(data);
     let image_width = read_u32(data);
