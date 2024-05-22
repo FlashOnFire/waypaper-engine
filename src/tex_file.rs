@@ -1,6 +1,7 @@
 use std::fs;
 use std::io::{Cursor, Read};
 use std::path::Path;
+use bitflags::bitflags;
 use crate::file_reading_utils::{read_null_terminated_str, read_u32};
 
 #[derive(Debug, Clone)]
@@ -29,25 +30,12 @@ impl TryFrom<u32> for TextureFormat {
     }
 }
 
-#[derive(Debug, Clone)]
-pub enum TextureFlags {
-    None = 0,
-    NoInterpolation = 1,
-    ClampUVs = 2,
-    IsGIF = 4,
-}
-
-impl TryFrom<u32> for TextureFlags {
-    type Error = ();
-
-    fn try_from(value: u32) -> Result<Self, Self::Error> {
-        Ok(match value {
-            0 => Self::None,
-            1 => Self::NoInterpolation,
-            2 => Self::ClampUVs,
-            4 => Self::IsGIF,
-            _ => return Err(()),
-        })
+bitflags! {
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    struct TextureFlags: u32 {
+        const NoInterpolation = 1 << 0;
+        const ClampUVs = 1 << 1;
+        const IsGIF = 1 << 2;
     }
 }
 
@@ -135,7 +123,7 @@ fn read_header(data: &mut Cursor<Vec<u8>>) -> Header {
     println!("{version} - {version2}");
 
     let format = TextureFormat::try_from(read_u32(data)).unwrap();
-    let flags = TextureFlags::try_from(read_u32(data)).unwrap(); // TODO: Flags can probably be combined
+    let flags = TextureFlags::from_bits(read_u32(data)).unwrap(); // TODO: Flags can probably be combined
     let texture_width = read_u32(data);
     let texture_height = read_u32(data);
     let image_width = read_u32(data);

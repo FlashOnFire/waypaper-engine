@@ -627,6 +627,7 @@ dependencies = [
 name = "waypaper-engine"
 version = "0.1.0"
 dependencies = [
+ "bitflags",
  "cgmath",
  "fps_counter",
  "freeimage",

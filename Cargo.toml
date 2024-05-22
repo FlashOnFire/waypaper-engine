@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+bitflags = "2.5.0"
 cgmath = "0.18.0"
 fps_counter = "3.0.0"
 freeimage = "0.2.2"
