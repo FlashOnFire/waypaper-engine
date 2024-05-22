@@ -2,7 +2,7 @@ use std::fs;
 use std::io::{Cursor, Read};
 use std::path::Path;
 use bitflags::bitflags;
-use crate::file_reading_utils::{read_null_terminated_str, read_u32};
+use crate::file_reading_utils::{read_null_terminated_str, read_u32, read_color};
 
 #[derive(Debug, Clone)]
 pub enum TextureFormat {
@@ -81,7 +81,7 @@ pub struct Header {
     texture_height: u32,
     image_width: u32,
     image_height: u32,
-    unknown_funny_number: u32,
+    dominant_color: (u8, u8, u8, u8),
 }
 
 pub struct TexFile {
@@ -128,14 +128,14 @@ fn read_header(data: &mut Cursor<Vec<u8>>) -> Header {
     let texture_height = read_u32(data);
     let image_width = read_u32(data);
     let image_height = read_u32(data);
-    let unknown_funny_number = read_u32(data);
+    let dominant_color = read_color(data);
 
     println!("Texture info:");
     println!("\tFormat: {format:?}");
     println!("\tFlags: {flags:?}");
     println!("\tTexture Size: {texture_width}x{texture_height}");
     println!("\tImage Size: {image_width}x{image_height}");
-    println!("\tUnknown funny number: {unknown_funny_number}");
+    println!("\tDominant Color: {dominant_color:?}");
 
     Header {
         format,
@@ -144,7 +144,7 @@ fn read_header(data: &mut Cursor<Vec<u8>>) -> Header {
         texture_height,
         image_width,
         image_height,
-        unknown_funny_number,
+        dominant_color,
     }
 }
 
