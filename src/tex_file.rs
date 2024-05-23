@@ -95,7 +95,8 @@ impl TexFile {
         tracing::debug!("Unpacking Tex File !");
 
         let mut data: Cursor<Vec<u8>> = Cursor::new(fs::read(path)?);
-        tracing::debug!("Data Length : {}", data.get_ref().len());
+        let data_length = data.get_ref().len();
+        tracing::debug!("Data Length : {data_length}");
 
         let header = read_header(&mut data);
         let container_data = read_container_data(&mut data);
@@ -115,6 +116,8 @@ impl TexFile {
 
             images.push(mipmap_entries);
         }
+        
+        assert_eq!(data.position() as usize, data_length, "Malformed Tex File");
 
         Ok(Self {
             header,
