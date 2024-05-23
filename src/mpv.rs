@@ -3,7 +3,7 @@ use std::rc::Rc;
 
 use khronos_egl::{Context, Instance, Static};
 use libmpv2::render::{OpenGLInitParams, RenderContext, RenderParam, RenderParamApiType};
-use libmpv2::{FileState, Mpv};
+use libmpv2::Mpv;
 use smithay_client_toolkit::reexports::client::Connection;
 
 //noinspection RsUnusedImport (false positive)
@@ -68,7 +68,7 @@ impl MpvRenderer {
     }
     pub fn play_file(&self, file: &Path) {
         self.mpv
-            .playlist_load_files(&[(file.to_str().unwrap(), FileState::Replace, None)])
+            .command("loadfile", &[&file.to_string_lossy(), "replace"])
             .unwrap();
     }
 
