@@ -1,21 +1,22 @@
 {
-  rustPlatform,
   lib,
-  wayland,
+  rustPlatform,
   pkg-config,
-  glew-egl,
+  wayland,
+  libGL,
   libxkbcommon,
   mpv,
 }:
 rustPlatform.buildRustPackage {
   pname = "waypaper-engine";
   version = "0.0";
-  cargoLock.lockFile = ../../Cargo.lock;
   src = lib.cleanSource ../..;
+
+  cargoLock.lockFile = ../../Cargo.lock;
 
   buildInputs = [
     wayland
-    glew-egl
+    libGL
     libxkbcommon
     mpv
   ];

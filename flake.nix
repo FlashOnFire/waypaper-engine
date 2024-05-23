@@ -40,13 +40,21 @@
         };
 
         devShells.default = with pkgs;
-          mkShell {
-            inputsFrom = [self'.packages.waypaper-engine];
+          mkShell rec {
+            nativeBuildInputs = [pkg-config];
+
             buildInputs = [
               (rust-bin.stable.latest.default.override {
-                extensions = ["rust-analyzer" "rust-src" "rustfmt"];
+                extensions = ["rust-analyzer" "rust-src"];
               })
+
+              mpv
+              libGL
+              libxkbcommon
+              wayland
             ];
+
+            LD_LIBRARY_PATH = lib.makeLibraryPath buildInputs;
           };
 
         formatter = pkgs.alejandra;
