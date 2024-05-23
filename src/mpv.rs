@@ -68,7 +68,7 @@ impl MpvRenderer {
     }
     pub fn play_file(&self, file: &Path) {
         self.mpv
-            .command("loadfile", &[&file.to_string_lossy(), "replace"])
+            .command("loadfile", &[&("\"".to_owned() + &file.to_string_lossy() + "\""), "replace"])
             .unwrap();
     }
 
