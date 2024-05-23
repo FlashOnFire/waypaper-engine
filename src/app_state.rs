@@ -56,7 +56,7 @@ impl AppState {
                 .join(project.file.as_ref().unwrap());
 
             if path.exists() {
-                println!("Found video file ! (Path : {path:?})");
+                tracing::info!("Found video file ! (Path : {path:?})");
 
                 self.rendering_context.set_wallpaper(output, wallpaper);
 

@@ -38,7 +38,7 @@ impl Wallpaper {
 
         Ok(match project.wallpaper_type {
             WallpaperType::Video => {
-                println!("{}", project.file.as_ref().unwrap());
+                tracing::debug!("{}", project.file.as_ref().unwrap());
                 let mpv_renderer = MpvRenderer::new(
                     connection,
                     egl_state.egl.clone(),
@@ -67,9 +67,9 @@ impl Wallpaper {
     pub(crate) fn init_render(&mut self) {
         match self {
             Wallpaper::Video { mpv_renderer, .. } => mpv_renderer.init_rendering_context(),
-            Wallpaper::Scene { .. } => {}
-            Wallpaper::Web { .. } => {}
-            Wallpaper::Preset { .. } => {}
+            Wallpaper::Scene { .. } => todo!(),
+            Wallpaper::Web { .. } => todo!(),
+            Wallpaper::Preset { .. } => todo!(),
         }
     }
 

@@ -40,12 +40,12 @@ pub struct ScenePackage {
 
 impl ScenePackage {
     pub fn new(path: &Path) -> Result<Self, Box<dyn std::error::Error>> {
-        println!("Unpacking Scene Package !");
+        tracing::debug!("Unpacking Scene Package !");
 
         assert!(path.exists() && path.is_file());
 
         let mut data: Cursor<Vec<u8>> = Cursor::new(fs::read(path)?);
-        println!("Data Length : {}", data.get_ref().len());
+        tracing::debug!("Data Length : {}", data.get_ref().len());
 
         let file_count = read_header(&mut data);
 
@@ -55,7 +55,7 @@ impl ScenePackage {
 
         let header_offset = data.position();
         for entry in &files {
-            println!("\t{} - {} - {}", entry.name, entry.offset, entry.size);
+            tracing::debug!("\t{} - {} - {}", entry.name, entry.offset, entry.size);
             contents.insert(
                 entry.name.clone(),
                 read_file(&mut data, header_offset, entry),
@@ -91,7 +91,7 @@ fn read_header(data: &mut Cursor<Vec<u8>>) -> u32 {
     assert_eq!(version, "PKGV0001");
 
     let file_count = read_u32(data);
-    println!("{version} - File count : {file_count}");
+    tracing::debug!("{version} - File count : {file_count}");
 
     file_count
 }

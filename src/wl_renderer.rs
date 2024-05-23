@@ -60,6 +60,7 @@ impl RenderingContext {
             wl_state,
         }
     }
+
     pub fn loop_fn(&mut self) {
         loop {
             self.event_queue
@@ -67,7 +68,7 @@ impl RenderingContext {
                 .unwrap();
 
             if self.wl_state.layers.values().any(|layer| layer.exit) {
-                println!("Exiting");
+                tracing::debug!("Exiting");
                 break;
             }
         }
@@ -228,8 +229,8 @@ impl OutputsList {
             let refresh_rate = (current_mode.refresh_rate as f32 / 1000.0).ceil() as i32;
             let scale = info.scale_factor;
 
-            println!("Outputs :");
-            println!("\t- {name} : {width}x{height} - {refresh_rate}hz - {scale}");
+            tracing::debug!("Outputs :");
+            tracing::debug!("\t- {name} : {width}x{height} - {refresh_rate}hz - {scale}");
         }
     }
 }
@@ -339,7 +340,7 @@ impl LayerShellHandler for WLState {
         configure: LayerSurfaceConfigure,
         _serial: u32,
     ) {
-        println!("New Size : {:?}", configure.new_size);
+        tracing::debug!("New Size : {:?}", configure.new_size);
 
         let layer = self
             .layers
@@ -380,14 +381,14 @@ impl SeatHandler for WLState {
         _capability: Capability,
     ) {
         /*if capability == Capability::Keyboard && self.keyboard.is_none() {
-            println!("Set keyboard capability");
+            tracing::debug!("Set keyboard capability");
             let keyboard =
                 self.seat_state.get_keyboard(qh, &seat, None).expect("Failed to create keyboard");
             self.keyboard = Some(keyboard);
         }
 
         if capability == Capability::Pointer && self.pointer.is_none() {
-            println!("Set pointer capability");
+            tracing::debug!("Set pointer capability");
             let pointer = self.seat_state.get_pointer(qh, &seat).expect("Failed to create pointer");
             self.pointer = Some(pointer);
         }*/
@@ -401,12 +402,12 @@ impl SeatHandler for WLState {
         _capability: Capability,
     ) {
         /*if capability == Capability::Keyboard && self.keyboard.is_some() {
-            println!("Unset keyboard capability");
+            tracing::debug!("Unset keyboard capability");
             self.keyboard.take().unwrap().release();
         }
 
         if capability == Capability::Pointer && self.pointer.is_some() {
-            println!("Unset pointer capability");
+            tracing::debug!("Unset pointer capability");
             self.pointer.take().unwrap().release();
         }*/
     }
@@ -464,7 +465,7 @@ impl SimpleLayer {
         self.layer.commit();
 
         let fps = self.fps_counter.tick();
-        println!(
+        tracing::debug!(
             "Output {} : {} FPS",
             self.output.1.name.as_ref().unwrap(),
             fps

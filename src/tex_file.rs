@@ -92,10 +92,10 @@ pub struct TexFile {
 
 impl TexFile {
     pub fn new(path: &Path) -> Result<Self, Box<dyn std::error::Error>> {
-        println!("Unpacking Tex File !");
+        tracing::debug!("Unpacking Tex File !");
 
         let mut data: Cursor<Vec<u8>> = Cursor::new(fs::read(path)?);
-        println!("Data Length : {}", data.get_ref().len());
+        tracing::debug!("Data Length : {}", data.get_ref().len());
 
         let header = read_header(&mut data);
         let container_data = read_container_data(&mut data);
@@ -103,13 +103,13 @@ impl TexFile {
         let mut images = vec![];
 
         for image in 0..container_data.image_count {
-            println!("Reading Image {image}: ");
+            tracing::debug!("Reading Image {image}: ");
 
             let mipmap_count = read_u32(&mut data);
             let mut mipmap_entries = vec![];
 
             for i in 0..mipmap_count {
-                println!("\tReading Mipmap {i} :");
+                tracing::debug!("\tReading Mipmap {i} :");
                 mipmap_entries.push(read_mipmap(&mut data, &container_data.version));
             }
 
@@ -130,7 +130,7 @@ fn read_header(data: &mut Cursor<Vec<u8>>) -> Header {
     let version2 = read_null_terminated_str(data);
     assert_eq!(version2, "TEXI0001");
 
-    println!("{version} - {version2}");
+    tracing::debug!("{version} - {version2}");
 
     let format = TextureFormat::try_from(read_u32(data)).unwrap();
     let flags = TextureFlags::from_bits(read_u32(data)).unwrap();
@@ -140,12 +140,12 @@ fn read_header(data: &mut Cursor<Vec<u8>>) -> Header {
     let image_height = read_u32(data);
     let dominant_color = read_color(data);
 
-    println!("Texture info:");
-    println!("\tFormat: {format:?}");
-    println!("\tFlags: {flags:?}");
-    println!("\tTexture Size: {texture_width}x{texture_height}");
-    println!("\tImage Size: {image_width}x{image_height}");
-    println!("\tDominant Color: {dominant_color:?}");
+    tracing::debug!("Texture info:");
+    tracing::debug!("\tFormat: {format:?}");
+    tracing::debug!("\tFlags: {flags:?}");
+    tracing::debug!("\tTexture Size: {texture_width}x{texture_height}");
+    tracing::debug!("\tImage Size: {image_width}x{image_height}");
+    tracing::debug!("\tDominant Color: {dominant_color:?}");
 
     Header {
         format,
@@ -160,7 +160,7 @@ fn read_header(data: &mut Cursor<Vec<u8>>) -> Header {
 
 fn read_container_data(data: &mut Cursor<Vec<u8>>) -> ContainerData {
     let container_version_str = read_null_terminated_str(data);
-    println!("Container version: {container_version_str}");
+    tracing::debug!("Container version: {container_version_str}");
 
     let version = ContainerVersion::try_from(container_version_str.as_str()).unwrap();
 
@@ -170,9 +170,9 @@ fn read_container_data(data: &mut Cursor<Vec<u8>>) -> ContainerData {
         ContainerVersion::TEXB003 => Some(read_u32(data)),
     };
 
-    println!("\tImage Count: {image_count}");
+    tracing::debug!("\tImage Count: {image_count}");
     if let Some(format) = freeimage_format {
-        println!("\tFreeimage Format: {format}");
+        tracing::debug!("\tFreeimage Format: {format}");
     }
 
     ContainerData {
@@ -201,18 +201,18 @@ fn read_mipmap(cursor: &mut Cursor<Vec<u8>>, container_version: &ContainerVersio
 
     let image_size = read_u32(cursor);
 
-    println!("\t\tWidth: {width}");
-    println!("\t\tHeight: {height}");
-    println!("\t\tIs Compressed: {is_compressed}");
+    tracing::debug!("\t\tWidth: {width}");
+    tracing::debug!("\t\tHeight: {height}");
+    tracing::debug!("\t\tIs Compressed: {is_compressed}");
 
     if is_compressed {
-        println!(
+        tracing::debug!(
             "\t\tImage Size Uncompressed: {}",
             image_size_uncompressed.unwrap()
         );
     }
 
-    println!("\t\tImage Size: {image_size}",);
+    tracing::debug!("\t\tImage Size: {image_size}",);
 
     let mut bytes = vec![];
     cursor
