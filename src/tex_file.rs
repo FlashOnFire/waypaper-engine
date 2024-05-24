@@ -1,4 +1,6 @@
-use crate::file_reading_utils::{read_color, read_null_terminated_str, read_u32};
+use crate::file_reading_utils::{
+    read_color, read_f32, read_i32, read_null_terminated_str, read_u32,
+};
 use bitflags::bitflags;
 
 use std::fs;
@@ -34,13 +36,13 @@ impl TryFrom<u32> for TextureFormat {
 bitflags! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     struct TextureFlags: u32 {
-        const NoInterpolation = 1 << 0;
+        const NoInterpolation = 1;
         const ClampUVs = 1 << 1;
         const IsGIF = 1 << 2;
     }
 }
 
-pub struct ContainerData {
+pub struct Container {
     version: ContainerVersion,
     image_count: u32,
     freeimage_format: Option<u32>,
@@ -76,7 +78,7 @@ impl TryFrom<&str> for ContainerVersion {
 
 pub struct Header {
     format: TextureFormat,
-    flags: TextureFlags,
+    texture_flags: TextureFlags,
     texture_width: u32,
     texture_height: u32,
     image_width: u32,
@@ -84,10 +86,48 @@ pub struct Header {
     dominant_color: (u8, u8, u8, u8),
 }
 
+pub enum FrameInfoContainerVersion {
+    TEXS0001,
+    TEXS0002,
+    TEXS0003,
+}
+
+impl TryFrom<&str> for FrameInfoContainerVersion {
+    type Error = ();
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        Ok(match value {
+            "TEXS0001" => Self::TEXS0001,
+            "TEXS0002" => Self::TEXS0002,
+            "TEXS0003" => Self::TEXS0003,
+            _ => return Err(()),
+        })
+    }
+}
+
+pub struct FrameInfoContainer {
+    version: FrameInfoContainerVersion,
+    frame_infos: Vec<FrameInfo>,
+    gif_width: Option<u32>,
+    gif_height: Option<u32>,
+}
+
+struct FrameInfo {
+    image_id: i32,
+    frame_time: f32,
+    x: f32,
+    y: f32,
+    width: f32,
+    width_y: f32,
+    height_x: f32,
+    height: f32,
+}
+
 pub struct TexFile {
     header: Header,
-    container_data: ContainerData,
+    container: Container,
     images: Vec<Vec<MipmapEntry>>,
+    frames_infos: Option<FrameInfoContainer>,
 }
 
 impl TexFile {
@@ -99,30 +139,40 @@ impl TexFile {
         tracing::debug!("Data Length : {data_length}");
 
         let header = read_header(&mut data);
-        let container_data = read_container_data(&mut data);
+        let container = read_container(&mut data);
 
         let mut images = vec![];
 
-        for image in 0..container_data.image_count {
+        for image in 0..container.image_count {
             tracing::debug!("Reading Image {image}: ");
 
             let mipmap_count = read_u32(&mut data);
             let mut mipmap_entries = vec![];
 
+            tracing::debug!("\tMipmap Count: {mipmap_count}");
+
             for i in 0..mipmap_count {
                 tracing::debug!("\tReading Mipmap {i} :");
-                mipmap_entries.push(read_mipmap(&mut data, &container_data.version));
+                mipmap_entries.push(read_mipmap(&mut data, &container.version));
             }
 
             images.push(mipmap_entries);
         }
-        
+
+        let frames_infos = if header.texture_flags.contains(TextureFlags::IsGIF) {
+            tracing::debug!("Reading Frameinfo:");
+            Some(read_frame_info(&mut data))
+        } else {
+            None
+        };
+
         assert_eq!(data.position() as usize, data_length, "Malformed Tex File");
 
         Ok(Self {
             header,
-            container_data,
+            container,
             images,
+            frames_infos,
         })
     }
 }
@@ -152,7 +202,7 @@ fn read_header(data: &mut Cursor<Vec<u8>>) -> Header {
 
     Header {
         format,
-        flags,
+        texture_flags: flags,
         texture_width,
         texture_height,
         image_width,
@@ -161,7 +211,7 @@ fn read_header(data: &mut Cursor<Vec<u8>>) -> Header {
     }
 }
 
-fn read_container_data(data: &mut Cursor<Vec<u8>>) -> ContainerData {
+fn read_container(data: &mut Cursor<Vec<u8>>) -> Container {
     let container_version_str = read_null_terminated_str(data);
     tracing::debug!("Container version: {container_version_str}");
 
@@ -178,7 +228,7 @@ fn read_container_data(data: &mut Cursor<Vec<u8>>) -> ContainerData {
         tracing::debug!("\tFreeimage Format: {format}");
     }
 
-    ContainerData {
+    Container {
         version,
         image_count,
         freeimage_format,
@@ -230,5 +280,68 @@ fn read_mipmap(cursor: &mut Cursor<Vec<u8>>, container_version: &ContainerVersio
         image_size_uncompressed,
         image_size,
         mipmap_pixels: vec![],
+    }
+}
+
+fn read_frame_info(data: &mut Cursor<Vec<u8>>) -> FrameInfoContainer {
+    let version =
+        FrameInfoContainerVersion::try_from(read_null_terminated_str(data).as_str()).unwrap();
+
+    let (gif_width, gif_height) = match version {
+        FrameInfoContainerVersion::TEXS0001 | FrameInfoContainerVersion::TEXS0002 => (None, None),
+        FrameInfoContainerVersion::TEXS0003 => (Some(read_u32(data)), Some(read_u32(data))),
+    };
+    
+    let frame_count = read_u32(data);
+    tracing::debug!("\tFrame Count: {frame_count}");
+    
+    
+    let mut frames = vec![];
+
+    for i in 0..frame_count {
+        tracing::debug!("\tReading frame {i} infos:");
+        
+        let frame = match version {
+            FrameInfoContainerVersion::TEXS0001 => FrameInfo {
+                image_id: read_i32(data),
+                frame_time: read_f32(data),
+                x: read_i32(data) as f32,
+                y: read_i32(data) as f32,
+                width: read_i32(data) as f32,
+                width_y: read_i32(data) as f32,
+                height_x: read_i32(data) as f32,
+                height: read_i32(data) as f32,
+            },
+            FrameInfoContainerVersion::TEXS0002 | FrameInfoContainerVersion::TEXS0003 => {
+                FrameInfo {
+                    image_id: read_i32(data),
+                    frame_time: read_f32(data),
+                    x: read_f32(data),
+                    y: read_f32(data),
+                    width: read_f32(data),
+                    width_y: read_f32(data),
+                    height_x: read_f32(data),
+                    height: read_f32(data),
+                }
+            }
+        };
+        
+        tracing::debug!("\t\tImage ID: {}", frame.image_id);
+        tracing::debug!("\t\tFrame Time: {}", frame.frame_time);
+        tracing::debug!("\t\tX: {}", frame.x);
+        tracing::debug!("\t\tY: {}", frame.y);
+        tracing::debug!("\t\tWidth: {}", frame.width);
+        tracing::debug!("\t\tWidth Y: {}", frame.width_y);
+        tracing::debug!("\t\tHeight X: {}", frame.height_x);
+        tracing::debug!("\t\tHeight: {}", frame.height);
+        
+        frames.push(frame);
+    }
+    
+    FrameInfoContainer {
+        version,
+        frame_infos: frames,
+        gif_width,
+        gif_height,
     }
 }

@@ -7,6 +7,20 @@ pub fn read_u32(cursor: &mut Cursor<Vec<u8>>) -> u32 {
     u32::from_le_bytes(first_4_bytes)
 }
 
+pub fn read_i32(cursor: &mut Cursor<Vec<u8>>) -> i32 {
+    let mut first_4_bytes: [u8; 4] = [0; 4];
+    cursor.read_exact(&mut first_4_bytes).unwrap();
+
+    i32::from_le_bytes(first_4_bytes)
+}
+
+pub fn read_f32(cursor: &mut Cursor<Vec<u8>>) -> f32 {
+    let mut first_4_bytes: [u8; 4] = [0; 4];
+    cursor.read_exact(&mut first_4_bytes).unwrap();
+
+    f32::from_le_bytes(first_4_bytes)
+}
+
 pub fn read_null_terminated_str(cursor: &mut Cursor<Vec<u8>>) -> String {
     let mut bytes = vec![];
 
@@ -31,5 +45,5 @@ fn read_sized_str(data: &mut Cursor<Vec<u8>>, size: u32) -> String {
 pub(crate) fn read_color(data: &mut Cursor<Vec<u8>>) -> (u8, u8, u8, u8) {
     let number = read_u32(data);
 
-    number.to_le_bytes().try_into().unwrap()
+    number.to_le_bytes().into()
 }
