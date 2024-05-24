@@ -57,6 +57,7 @@ pub struct MipmapEntry {
     mipmap_pixels: Vec<u8>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ContainerVersion {
     TEXB001,
     TEXB002,
@@ -86,6 +87,7 @@ pub struct Header {
     dominant_color: (u8, u8, u8, u8),
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FrameInfoContainerVersion {
     TEXS0001,
     TEXS0002,
@@ -212,10 +214,8 @@ fn read_header(data: &mut Cursor<Vec<u8>>) -> Header {
 }
 
 fn read_container(data: &mut Cursor<Vec<u8>>) -> Container {
-    let container_version_str = read_null_terminated_str(data);
-    tracing::debug!("Container version: {container_version_str}");
-
-    let version = ContainerVersion::try_from(container_version_str.as_str()).unwrap();
+    let version = ContainerVersion::try_from(read_null_terminated_str(data).as_str()).unwrap();
+    tracing::debug!("Container version: {version:?}");
 
     let image_count = read_u32(data);
     let freeimage_format = match version {
@@ -287,20 +287,21 @@ fn read_frame_info(data: &mut Cursor<Vec<u8>>) -> FrameInfoContainer {
     let version =
         FrameInfoContainerVersion::try_from(read_null_terminated_str(data).as_str()).unwrap();
 
+    tracing::debug!("\tFrame Info Container version: {version:?}");
+
+    let frame_count = read_i32(data);
+    tracing::debug!("\tFrame Count: {frame_count}");
+
     let (gif_width, gif_height) = match version {
         FrameInfoContainerVersion::TEXS0001 | FrameInfoContainerVersion::TEXS0002 => (None, None),
         FrameInfoContainerVersion::TEXS0003 => (Some(read_u32(data)), Some(read_u32(data))),
     };
-    
-    let frame_count = read_u32(data);
-    tracing::debug!("\tFrame Count: {frame_count}");
-    
-    
+
     let mut frames = vec![];
 
     for i in 0..frame_count {
         tracing::debug!("\tReading frame {i} infos:");
-        
+
         let frame = match version {
             FrameInfoContainerVersion::TEXS0001 => FrameInfo {
                 image_id: read_i32(data),
@@ -325,7 +326,7 @@ fn read_frame_info(data: &mut Cursor<Vec<u8>>) -> FrameInfoContainer {
                 }
             }
         };
-        
+
         tracing::debug!("\t\tImage ID: {}", frame.image_id);
         tracing::debug!("\t\tFrame Time: {}", frame.frame_time);
         tracing::debug!("\t\tX: {}", frame.x);
@@ -334,10 +335,10 @@ fn read_frame_info(data: &mut Cursor<Vec<u8>>) -> FrameInfoContainer {
         tracing::debug!("\t\tWidth Y: {}", frame.width_y);
         tracing::debug!("\t\tHeight X: {}", frame.height_x);
         tracing::debug!("\t\tHeight: {}", frame.height);
-        
+
         frames.push(frame);
     }
-    
+
     FrameInfoContainer {
         version,
         frame_infos: frames,
