@@ -10,6 +10,8 @@ fps_counter = "3.0.0"
 gl = "0.14.0"
 khronos-egl = { version = "6.0.0", features = ["static"] }
 libmpv2 = "4.0.0"
+num_enum = "0.7.2"
+num_enum_derive = "0.7.2"
 serde = { version = "1.0", features = ["derive"] }
 serde-this-or-that = "0.4.2"
 serde_json = "1.0"

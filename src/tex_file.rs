@@ -3,11 +3,13 @@ use crate::file_reading_utils::{
 };
 use bitflags::bitflags;
 
+use num_enum_derive::TryFromPrimitive;
 use std::fs;
 use std::io::{Cursor, Read};
 use std::path::Path;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, TryFromPrimitive)]
+#[repr(u32)]
 pub enum TextureFormat {
     RGBA8888 = 0,
     DXT5 = 4,
@@ -15,22 +17,6 @@ pub enum TextureFormat {
     DXT1 = 7,
     RG88 = 8,
     R8 = 9,
-}
-
-impl TryFrom<u32> for TextureFormat {
-    type Error = ();
-
-    fn try_from(value: u32) -> Result<Self, Self::Error> {
-        Ok(match value {
-            0 => Self::RGBA8888,
-            4 => Self::DXT5,
-            6 => Self::DXT3,
-            7 => Self::DXT1,
-            8 => Self::RG88,
-            9 => Self::R8,
-            _ => return Err(()),
-        })
-    }
 }
 
 bitflags! {
@@ -45,7 +31,51 @@ bitflags! {
 pub struct Container {
     version: ContainerVersion,
     image_count: u32,
-    freeimage_format: Option<u32>,
+    image_format: Option<ImageFormat>,
+}
+
+// This enum comes from FreeImage as Wallpaper Engine relies on it to provide us the image format
+#[derive(Debug, Clone, TryFromPrimitive)]
+#[repr(u32)]
+pub enum ImageFormat {
+    Bmp = 0,
+    Ico = 1,
+    Jpeg = 2,
+    Jng = 3,
+    Koala = 4,
+    LbmOrIff = 5,
+    Mng = 6,
+    Pbm = 7,
+    PbmRaw = 8,
+    Pcd = 9,
+    Pcx = 10,
+    Pgm = 11,
+    PgmRaw = 12,
+    Png = 13,
+    Ppm = 14,
+    PpmRaw = 15,
+    Ras = 16,
+    Targa = 17,
+    Tiff = 18,
+    Wbmp = 19,
+    Psd = 20,
+    Cut = 21,
+    Xbm = 22,
+    Xpm = 23,
+    Dds = 24,
+    Gif = 25,
+    Hdr = 26,
+    // This format is disabled in FreeImage itself for security reasons, so it shouldn't be used in wallpaper engine textures anyway
+    // FAXG3 = 27,
+    Sgi = 28,
+    Exr = 29,
+    J2K = 30,
+    Jp2 = 31,
+    Pfm = 32,
+    Pict = 33,
+    Raw = 34,
+    WebP = 35,
+    Jxr = 36,
 }
 
 pub struct MipmapEntry {
@@ -218,12 +248,12 @@ fn read_container(data: &mut Cursor<Vec<u8>>) -> Container {
     tracing::debug!("Container version: {version:?}");
 
     let image_count = read_u32(data);
-    let freeimage_format = match version {
+    let image_format = match version {
         ContainerVersion::TEXB001 | ContainerVersion::TEXB002 => None,
         ContainerVersion::TEXB003 => {
-            let format = read_i32(data);
-            if format > 0 {
-                Some(format as u32)
+            let freeimage_format = read_i32(data);
+            if freeimage_format > 0 {
+                Some(ImageFormat::try_from(freeimage_format as u32).unwrap())
             } else {
                 None
             }
@@ -231,15 +261,15 @@ fn read_container(data: &mut Cursor<Vec<u8>>) -> Container {
     };
 
     tracing::debug!("\tImage Count: {image_count}");
-    match freeimage_format {
-        None => tracing::debug!("\tFreeimage Format: No format"),
-        Some(format) => tracing::debug!("\tFreeimage Format: {format}"),
+    match image_format {
+        None => tracing::debug!("\tImage Format: No format"),
+        Some(ref format) => tracing::debug!("\tImage Format: {format:?}"),
     }
 
     Container {
         version,
         image_count,
-        freeimage_format,
+        image_format,
     }
 }
 
