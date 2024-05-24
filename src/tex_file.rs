@@ -220,12 +220,20 @@ fn read_container(data: &mut Cursor<Vec<u8>>) -> Container {
     let image_count = read_u32(data);
     let freeimage_format = match version {
         ContainerVersion::TEXB001 | ContainerVersion::TEXB002 => None,
-        ContainerVersion::TEXB003 => Some(read_u32(data)),
+        ContainerVersion::TEXB003 => {
+            let format = read_i32(data);
+            if format > 0 {
+                Some(format as u32)
+            } else {
+                None
+            }
+        }
     };
 
     tracing::debug!("\tImage Count: {image_count}");
-    if let Some(format) = freeimage_format {
-        tracing::debug!("\tFreeimage Format: {format}");
+    match freeimage_format {
+        None => tracing::debug!("\tFreeimage Format: No format"),
+        Some(format) => tracing::debug!("\tFreeimage Format: {format}"),
     }
 
     Container {
