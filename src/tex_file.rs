@@ -4,6 +4,7 @@ use std::path::Path;
 
 use bitflags::bitflags;
 use cgmath::{InnerSpace, Vector2};
+use lz4_flex::decompress;
 use num_enum_derive::TryFromPrimitive;
 
 use crate::file_reading_utils::{
@@ -83,10 +84,7 @@ pub enum ImageFormat {
 pub struct MipmapEntry {
     width: u32,
     height: u32,
-    is_compressed: bool,
-    image_size_uncompressed: Option<u32>,
-    image_size: u32,
-    mipmap_pixels: Vec<u8>,
+    bytes: Vec<u8>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -294,6 +292,31 @@ fn read_mipmap(cursor: &mut Cursor<Vec<u8>>, container_version: &ContainerVersio
 
     let image_size = read_u32(cursor);
 
+    let mut bytes = vec![];
+
+    if is_compressed {
+        let mut raw_bytes = vec![];
+
+        cursor
+            .take(u64::from(image_size))
+            .read_to_end(&mut raw_bytes)
+            .unwrap();
+
+        let uncompressed_size = image_size_uncompressed.unwrap() as usize;
+
+        bytes = decompress(&raw_bytes, uncompressed_size).unwrap();
+        assert_eq!(
+            bytes.len(),
+            uncompressed_size,
+            "Failed texture decompression"
+        );
+    } else {
+        cursor
+            .take(u64::from(image_size))
+            .read_to_end(&mut bytes)
+            .unwrap();
+    }
+
     tracing::debug!("\t\tWidth: {width}");
     tracing::debug!("\t\tHeight: {height}");
     tracing::debug!("\t\tIs Compressed: {is_compressed}");
@@ -307,19 +330,10 @@ fn read_mipmap(cursor: &mut Cursor<Vec<u8>>, container_version: &ContainerVersio
 
     tracing::debug!("\t\tImage Size: {image_size}",);
 
-    let mut bytes = vec![];
-    cursor
-        .take(u64::from(image_size))
-        .read_to_end(&mut bytes)
-        .unwrap();
-
     MipmapEntry {
         width,
         height,
-        is_compressed,
-        image_size_uncompressed,
-        image_size,
-        mipmap_pixels: vec![],
+        bytes,
     }
 }
 
