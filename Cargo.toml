@@ -8,6 +8,7 @@ bitflags = "2.5.0"
 cgmath = "0.18.0"
 fps_counter = "3.0.0"
 gl = "0.14.0"
+image = "0.25.1"
 khronos-egl = { version = "6.0.0", features = ["static"] }
 libmpv2 = "4.0.0"
 lz4_flex = "0.11.3"

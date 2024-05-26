@@ -4,6 +4,7 @@ use std::path::Path;
 
 use bitflags::bitflags;
 use cgmath::{InnerSpace, Vector2};
+use image::ImageFormat;
 use lz4_flex::decompress;
 use num_enum_derive::TryFromPrimitive;
 
@@ -34,13 +35,13 @@ bitflags! {
 pub struct Container {
     version: ContainerVersion,
     image_count: u32,
-    image_format: Option<ImageFormat>,
+    freeimage_format: Option<FreeImageFormat>,
 }
 
 // This enum comes from FreeImage as Wallpaper Engine relies on it to provide us the image format
 #[derive(Debug, Clone, TryFromPrimitive)]
 #[repr(u32)]
-pub enum ImageFormat {
+pub enum FreeImageFormat {
     Bmp = 0,
     Ico = 1,
     Jpeg = 2,
@@ -79,6 +80,51 @@ pub enum ImageFormat {
     Raw = 34,
     WebP = 35,
     Jxr = 36,
+}
+
+impl TryInto<ImageFormat> for FreeImageFormat {
+    type Error = ();
+
+    fn try_into(self) -> Result<ImageFormat, Self::Error> {
+        match self {
+            FreeImageFormat::Bmp => Ok(ImageFormat::Bmp),
+            FreeImageFormat::Ico => Ok(ImageFormat::Ico),
+            FreeImageFormat::Jpeg => Ok(ImageFormat::Jpeg),
+            FreeImageFormat::Jng => Err(()),
+            FreeImageFormat::Koala => Err(()),
+            FreeImageFormat::LbmOrIff => Err(()),
+            FreeImageFormat::Mng => Err(()),
+            FreeImageFormat::Pbm => Ok(ImageFormat::Pnm),
+            FreeImageFormat::PbmRaw => Ok(ImageFormat::Pnm),
+            FreeImageFormat::Pcd => Err(()),
+            FreeImageFormat::Pcx => Err(()),
+            FreeImageFormat::Pgm => Ok(ImageFormat::Pnm),
+            FreeImageFormat::PgmRaw => Ok(ImageFormat::Pnm),
+            FreeImageFormat::Png => Ok(ImageFormat::Png),
+            FreeImageFormat::Ppm => Ok(ImageFormat::Pnm),
+            FreeImageFormat::PpmRaw => Ok(ImageFormat::Pnm),
+            FreeImageFormat::Ras => Err(()),
+            FreeImageFormat::Targa => Ok(ImageFormat::Tga),
+            FreeImageFormat::Tiff => Ok(ImageFormat::Tiff),
+            FreeImageFormat::Wbmp => Err(()),
+            FreeImageFormat::Psd => Err(()),
+            FreeImageFormat::Cut => Err(()),
+            FreeImageFormat::Xbm => Err(()),
+            FreeImageFormat::Xpm => Err(()),
+            FreeImageFormat::Dds => Ok(ImageFormat::Dds),
+            FreeImageFormat::Gif => Ok(ImageFormat::Gif),
+            FreeImageFormat::Hdr => Ok(ImageFormat::Hdr),
+            FreeImageFormat::Sgi => Err(()),
+            FreeImageFormat::Exr => Ok(ImageFormat::OpenExr),
+            FreeImageFormat::J2K => Err(()),
+            FreeImageFormat::Jp2 => Err(()),
+            FreeImageFormat::Pfm => Err(()),
+            FreeImageFormat::Pict => Err(()),
+            FreeImageFormat::Raw => Err(()),
+            FreeImageFormat::WebP => Ok(ImageFormat::WebP),
+            FreeImageFormat::Jxr => Err(()),
+        }
+    }
 }
 
 pub struct MipmapEntry {
@@ -231,12 +277,12 @@ fn read_container(data: &mut Cursor<Vec<u8>>) -> Container {
     tracing::debug!("Container version: {version:?}");
 
     let image_count = read_u32(data);
-    let image_format = match version {
+    let freeimage_format = match version {
         ContainerVersion::TEXB001 | ContainerVersion::TEXB002 => None,
         ContainerVersion::TEXB003 => {
-            let freeimage_format = read_i32(data);
-            if freeimage_format > 0 {
-                Some(ImageFormat::try_from(freeimage_format as u32).unwrap())
+            let format = read_i32(data);
+            if format > 0 {
+                Some(FreeImageFormat::try_from(format as u32).unwrap())
             } else {
                 None
             }
@@ -244,7 +290,7 @@ fn read_container(data: &mut Cursor<Vec<u8>>) -> Container {
     };
 
     tracing::debug!("\tImage Count: {image_count}");
-    match image_format {
+    match freeimage_format {
         None => tracing::debug!("\tImage Format: No format"),
         Some(ref format) => tracing::debug!("\tImage Format: {format:?}"),
     }
@@ -252,7 +298,7 @@ fn read_container(data: &mut Cursor<Vec<u8>>) -> Container {
     Container {
         version,
         image_count,
-        image_format,
+        freeimage_format,
     }
 }
 
@@ -355,7 +401,7 @@ fn read_frame_info(data: &mut Cursor<Vec<u8>>) -> FrameInfoContainer {
         FrameInfoContainerVersion::TEXS0001 | FrameInfoContainerVersion::TEXS0002 => None,
         FrameInfoContainerVersion::TEXS0003 => Some(Vector2::new(read_u32(data), read_u32(data))),
     };
-    
+
     tracing::debug!("\tSprite Size: {sprite_size:?}");
 
     let mut frames = vec![];
