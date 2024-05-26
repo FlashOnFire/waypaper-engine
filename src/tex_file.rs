@@ -173,23 +173,7 @@ impl TexFile {
         let header = read_header(&mut data);
         let container = read_container(&mut data);
 
-        let mut images = vec![];
-
-        for image in 0..container.image_count {
-            tracing::debug!("Reading Image {image}: ");
-
-            let mipmap_count = read_u32(&mut data);
-            let mut mipmap_entries = vec![];
-
-            tracing::debug!("\tMipmap Count: {mipmap_count}");
-
-            for i in 0..mipmap_count {
-                tracing::debug!("\tReading Mipmap {i} :");
-                mipmap_entries.push(read_mipmap(&mut data, &container.version));
-            }
-
-            images.push(mipmap_entries);
-        }
+        let images = read_images(&mut data, &container);
 
         let frames_infos = if header.texture_flags.contains(TextureFlags::IsGIF) {
             tracing::debug!("Reading Frames Infos:");
@@ -335,6 +319,28 @@ fn read_mipmap(cursor: &mut Cursor<Vec<u8>>, container_version: &ContainerVersio
         height,
         bytes,
     }
+}
+
+fn read_images(data: &mut Cursor<Vec<u8>>, container: &Container) -> Vec<Vec<MipmapEntry>> {
+    let mut images = vec![];
+
+    for i in 0..container.image_count {
+        tracing::debug!("Reading Image {i}: ");
+
+        let mipmap_count = read_u32(data);
+        tracing::debug!("\tMipmap Count: {mipmap_count}");
+
+        let mut mipmap_entries = vec![];
+
+        for i in 0..mipmap_count {
+            tracing::debug!("\tReading Mipmap {i} :");
+            mipmap_entries.push(read_mipmap(data, &container.version));
+        }
+
+        images.push(mipmap_entries);
+    }
+
+    images
 }
 
 fn read_frame_info(data: &mut Cursor<Vec<u8>>) -> FrameInfoContainer {
