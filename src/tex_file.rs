@@ -140,8 +140,7 @@ impl TryFrom<&str> for FrameInfoContainerVersion {
 pub struct FrameInfoContainer {
     version: FrameInfoContainerVersion,
     frame_infos: Vec<FrameInfo>,
-    gif_width: Option<u32>,
-    gif_height: Option<u32>,
+    gif_size: Option<Vector2<u32>>,
 }
 
 pub struct FrameInfo {
@@ -352,10 +351,12 @@ fn read_frame_info(data: &mut Cursor<Vec<u8>>) -> FrameInfoContainer {
     let frame_count = read_i32(data);
     tracing::debug!("\tFrame Count: {frame_count}");
 
-    let (gif_width, gif_height) = match version {
-        FrameInfoContainerVersion::TEXS0001 | FrameInfoContainerVersion::TEXS0002 => (None, None),
-        FrameInfoContainerVersion::TEXS0003 => (Some(read_u32(data)), Some(read_u32(data))),
+    let gif_size = match version {
+        FrameInfoContainerVersion::TEXS0001 | FrameInfoContainerVersion::TEXS0002 => None,
+        FrameInfoContainerVersion::TEXS0003 => Some(Vector2::new(read_u32(data), read_u32(data))),
     };
+    
+    tracing::debug!("\tGIF Size: {gif_size:?}");
 
     let mut frames = vec![];
 
@@ -410,7 +411,6 @@ fn read_frame_info(data: &mut Cursor<Vec<u8>>) -> FrameInfoContainer {
     FrameInfoContainer {
         version,
         frame_infos: frames,
-        gif_width,
-        gif_height,
+        gif_size,
     }
 }
