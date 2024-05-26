@@ -1,8 +1,9 @@
-use serde::de::{Error, Unexpected};
-use serde::{Deserialize, Deserializer, Serialize};
-use serde_this_or_that::{as_bool, as_f64, as_i64};
 use std::collections::HashMap;
 use std::str::FromStr;
+
+use serde::{Deserialize, Deserializer, Serialize};
+use serde::de::{Error, Unexpected};
+use serde_this_or_that::{as_bool, as_f64, as_i64};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

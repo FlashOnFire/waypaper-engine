@@ -3,10 +3,10 @@ use std::ffi::OsStr;
 use std::path::Path;
 use std::str::FromStr;
 
+use crate::{tex_file, WP_DIR};
 use crate::project::WEProject;
 use crate::wallpaper::Wallpaper;
 use crate::wl_renderer::RenderingContext;
-use crate::{tex_file, WP_DIR};
 
 pub struct AppState {
     rendering_context: RenderingContext,

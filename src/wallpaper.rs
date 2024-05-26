@@ -7,7 +7,7 @@ use smithay_client_toolkit::reexports::client::Connection;
 
 use crate::egl::EGLState;
 use crate::mpv::MpvRenderer;
-use crate::project::{WEProject, WallpaperType};
+use crate::project::{WallpaperType, WEProject};
 use crate::scene_package::ScenePackage;
 
 pub enum Wallpaper {

@@ -1,13 +1,15 @@
+use std::ffi::c_void;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use khronos_egl::{Context, Instance, Static};
-use libmpv2::render::{OpenGLInitParams, RenderContext, RenderParam, RenderParamApiType};
 use libmpv2::Mpv;
+use libmpv2::render::{OpenGLInitParams, RenderContext, RenderParam, RenderParamApiType};
 use smithay_client_toolkit::reexports::client::Connection;
 
-//noinspection RsUnusedImport (false positive)
-use crate::egl::get_proc_address;
+fn get_proc_address(egl: &Rc<Instance<Static>>, name: &str) -> *mut c_void {
+    egl.get_proc_address(name).unwrap() as *mut c_void
+}
 
 pub struct MpvRenderer {
     connection: Rc<Connection>,
@@ -30,7 +32,7 @@ impl MpvRenderer {
         mpv.set_property("cursor-autohide", "no").unwrap(); // No cursor hiding
         mpv.set_property("config", "no").unwrap(); // Disable config loading
 
-        // mpv.set_property("fbo-format", "rgba8").unwrap(); // FrameBuffer format (worse quality when setting it and i don't know why it works without but it works)
+        // mpv.set_property("fbo-format", "rgba8").unwrap(); // FrameBuffer format (worse quality when setting it and I don't know why it works without, but it works)
         mpv.set_property("vo", "libmpv").unwrap(); // Rendering through libmpv
         mpv.set_property("hwdec", "auto").unwrap(); // Auto-Detect Hardware Decoding
 
@@ -68,7 +70,13 @@ impl MpvRenderer {
     }
     pub fn play_file(&self, file: &Path) {
         self.mpv
-            .command("loadfile", &[&("\"".to_owned() + &file.to_string_lossy() + "\""), "replace"])
+            .command(
+                "loadfile",
+                &[
+                    &("\"".to_owned() + &file.to_string_lossy() + "\""),
+                    "replace",
+                ],
+            )
             .unwrap();
     }
 
@@ -87,7 +95,7 @@ impl MpvRenderer {
         self.render_context
             .as_ref()
             .unwrap()
-            .render::<Context>(0, i32::try_from(width).unwrap() as i32, height as i32, true)
+            .render::<Context>(0, i32::try_from(width).unwrap(), height as i32, true)
             .unwrap()
     }
 }

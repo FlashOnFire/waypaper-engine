@@ -1,9 +1,9 @@
-use khronos_egl::{Config, Context, Display, Instance, Static, Surface};
-use smithay_client_toolkit::reexports::client::Connection;
 use std::ffi::c_void;
 use std::rc::Rc;
 
 use khronos_egl as egl;
+use khronos_egl::{Config, Context, Display, Instance, Static, Surface};
+use smithay_client_toolkit::reexports::client::Connection;
 
 pub fn get_proc_address(egl: &Rc<Instance<Static>>, name: &str) -> *mut c_void {
     egl.get_proc_address(name).unwrap() as *mut c_void

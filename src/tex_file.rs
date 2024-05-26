@@ -194,7 +194,7 @@ impl TexFile {
         }
 
         let frames_infos = if header.texture_flags.contains(TextureFlags::IsGIF) {
-            tracing::debug!("Reading Frameinfo:");
+            tracing::debug!("Reading Frames Infos:");
             Some(read_frame_info(&mut data))
         } else {
             None

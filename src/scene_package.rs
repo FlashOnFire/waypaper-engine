@@ -1,8 +1,8 @@
+use std::{fs, io};
 use std::collections::HashMap;
 use std::fs::create_dir_all;
 use std::io::{Cursor, Read, Seek};
 use std::path::{Path, PathBuf};
-use std::{fs, io};
 
 use crate::file_reading_utils::{read_str, read_u32};
 
