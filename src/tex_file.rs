@@ -1,12 +1,14 @@
-use crate::file_reading_utils::{
-    read_color, read_f32, read_i32, read_null_terminated_str, read_u32,
-};
-use bitflags::bitflags;
-
-use num_enum_derive::TryFromPrimitive;
 use std::fs;
 use std::io::{Cursor, Read};
 use std::path::Path;
+
+use bitflags::bitflags;
+use cgmath::{InnerSpace, Vector2};
+use num_enum_derive::TryFromPrimitive;
+
+use crate::file_reading_utils::{
+    read_color, read_f32, read_i32, read_null_terminated_str, read_u32,
+};
 
 #[derive(Debug, Clone, TryFromPrimitive)]
 #[repr(u32)]
@@ -144,15 +146,15 @@ pub struct FrameInfoContainer {
     gif_height: Option<u32>,
 }
 
-struct FrameInfo {
+pub struct FrameInfo {
     image_id: i32,
     frame_time: f32,
     x: f32,
     y: f32,
     width: f32,
-    width_y: f32,
-    height_x: f32,
     height: f32,
+    x_axis: Vector2<f32>,
+    y_axis: Vector2<f32>,
 }
 
 pub struct TexFile {
@@ -340,38 +342,46 @@ fn read_frame_info(data: &mut Cursor<Vec<u8>>) -> FrameInfoContainer {
     for i in 0..frame_count {
         tracing::debug!("\tReading frame {i} infos:");
 
-        let frame = match version {
-            FrameInfoContainerVersion::TEXS0001 => FrameInfo {
-                image_id: read_i32(data),
-                frame_time: read_f32(data),
-                x: read_i32(data) as f32,
-                y: read_i32(data) as f32,
-                width: read_i32(data) as f32,
-                width_y: read_i32(data) as f32,
-                height_x: read_i32(data) as f32,
-                height: read_i32(data) as f32,
-            },
-            FrameInfoContainerVersion::TEXS0002 | FrameInfoContainerVersion::TEXS0003 => {
-                FrameInfo {
-                    image_id: read_i32(data),
-                    frame_time: read_f32(data),
-                    x: read_f32(data),
-                    y: read_f32(data),
-                    width: read_f32(data),
-                    width_y: read_f32(data),
-                    height_x: read_f32(data),
-                    height: read_f32(data),
-                }
-            }
+        let image_id = read_i32(data);
+
+        let (frame_time, x, y, x_axis, y_axis) = match version {
+            FrameInfoContainerVersion::TEXS0001 => (
+                read_f32(data),
+                read_i32(data) as f32,
+                read_i32(data) as f32,
+                Vector2::new(read_i32(data) as f32, read_i32(data) as f32),
+                Vector2::new(read_i32(data) as f32, read_i32(data) as f32),
+            ),
+            FrameInfoContainerVersion::TEXS0002 | FrameInfoContainerVersion::TEXS0003 => (
+                read_f32(data),
+                read_f32(data),
+                read_f32(data),
+                Vector2::new(read_f32(data), read_f32(data)),
+                Vector2::new(read_f32(data), read_f32(data)),
+            ),
+        };
+
+        let width = x_axis.magnitude();
+        let height = y_axis.magnitude();
+
+        let frame = FrameInfo {
+            image_id,
+            frame_time,
+            x,
+            y,
+            width: x_axis.magnitude(),
+            height: y_axis.magnitude(),
+            x_axis: x_axis / width,
+            y_axis: y_axis / height,
         };
 
         tracing::debug!("\t\tImage ID: {}", frame.image_id);
         tracing::debug!("\t\tFrame Time: {}", frame.frame_time);
         tracing::debug!("\t\tX: {}", frame.x);
         tracing::debug!("\t\tY: {}", frame.y);
+        tracing::debug!("\t\tX Axis: {:?}", frame.x_axis);
+        tracing::debug!("\t\tY Axis: {:?}", frame.y_axis);
         tracing::debug!("\t\tWidth: {}", frame.width);
-        tracing::debug!("\t\tWidth Y: {}", frame.width_y);
-        tracing::debug!("\t\tHeight X: {}", frame.height_x);
         tracing::debug!("\t\tHeight: {}", frame.height);
 
         frames.push(frame);
