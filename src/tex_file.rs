@@ -27,7 +27,7 @@ bitflags! {
     struct TextureFlags: u32 {
         const NoInterpolation = 1;
         const ClampUVs = 1 << 1;
-        const IsGIF = 1 << 2;
+        const IsSpritesheet = 1 << 2;
     }
 }
 
@@ -140,7 +140,7 @@ impl TryFrom<&str> for FrameInfoContainerVersion {
 pub struct FrameInfoContainer {
     version: FrameInfoContainerVersion,
     frame_infos: Vec<FrameInfo>,
-    gif_size: Option<Vector2<u32>>,
+    sprite_size: Option<Vector2<u32>>,
 }
 
 pub struct FrameInfo {
@@ -174,7 +174,7 @@ impl TexFile {
 
         let images = read_images(&mut data, &container);
 
-        let frames_infos = if header.texture_flags.contains(TextureFlags::IsGIF) {
+        let frames_infos = if header.texture_flags.contains(TextureFlags::IsSpritesheet) {
             tracing::debug!("Reading Frames Infos:");
             Some(read_frame_info(&mut data))
         } else {
@@ -351,12 +351,12 @@ fn read_frame_info(data: &mut Cursor<Vec<u8>>) -> FrameInfoContainer {
     let frame_count = read_i32(data);
     tracing::debug!("\tFrame Count: {frame_count}");
 
-    let gif_size = match version {
+    let sprite_size = match version {
         FrameInfoContainerVersion::TEXS0001 | FrameInfoContainerVersion::TEXS0002 => None,
         FrameInfoContainerVersion::TEXS0003 => Some(Vector2::new(read_u32(data), read_u32(data))),
     };
     
-    tracing::debug!("\tGIF Size: {gif_size:?}");
+    tracing::debug!("\tSprite Size: {sprite_size:?}");
 
     let mut frames = vec![];
 
@@ -411,6 +411,6 @@ fn read_frame_info(data: &mut Cursor<Vec<u8>>) -> FrameInfoContainer {
     FrameInfoContainer {
         version,
         frame_infos: frames,
-        gif_size,
+        sprite_size,
     }
 }
