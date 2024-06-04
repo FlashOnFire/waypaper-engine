@@ -1,10 +1,12 @@
 use std::error::Error;
 use std::ffi::OsStr;
+use std::fs::File;
 use std::path::Path;
 use std::str::FromStr;
 
 use crate::{tex_file, WP_DIR};
 use crate::project::WEProject;
+use crate::scene::Scene;
 use crate::wallpaper::Wallpaper;
 use crate::wl_renderer::RenderingContext;
 
@@ -20,9 +22,12 @@ impl AppState {
     }
 
     pub fn run(&mut self) -> Result<(), Box<dyn Error>> {
-        //tex_file::TexFile::new(Path::new("/home/flashonfire/RustroverProjects/waypaper-engine/tests/scene/materials/wallhaven-543465.tex")).unwrap();
+        let scene_file = File::open(Path::new("tests/scene/scene.json"))?;
+        let scene: Scene = serde_json::from_reader(scene_file)?;
+        
+        //tex_file::TexFile::new(Path::new("tests/hesfast.tex")).unwrap();
 
-        let path = Path::new(WP_DIR).join("1195491399");
+        /*let path = Path::new(WP_DIR).join("1195491399");
 
         let mut wallpaper = Wallpaper::new(
             self.rendering_context.connection.clone(),
@@ -62,7 +67,7 @@ impl AppState {
 
                 self.rendering_context.loop_fn();
             }
-        }
+        }*/
 
         Ok(())
     }

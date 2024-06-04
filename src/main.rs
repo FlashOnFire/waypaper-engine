@@ -15,6 +15,7 @@ mod scene_package;
 mod tex_file;
 mod wallpaper;
 mod wl_renderer;
+mod serde_utils;
 
 const WP_DIR: &str = "/home/flashonfire/.steam/steam/steamapps/workshop/content/431960/";
 
@@ -22,7 +23,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     tracing_subscriber::fmt()
         .with_env_filter(
             EnvFilter::builder()
-                .with_default_directive(LevelFilter::INFO.into())
+                .with_default_directive(LevelFilter::DEBUG.into())
                 .from_env_lossy(),
         )
         .init();

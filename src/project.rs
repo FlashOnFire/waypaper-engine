@@ -1,9 +1,12 @@
 use std::collections::HashMap;
-use std::str::FromStr;
 
-use serde::{Deserialize, Deserializer, Serialize};
-use serde::de::{Error, Unexpected};
+use serde::{Deserialize, Serialize};
 use serde_this_or_that::{as_bool, as_f64, as_i64};
+
+use crate::serde_utils::as_str_opt;
+use crate::serde_utils::as_u64_opt;
+use crate::serde_utils::as_wp_type;
+use crate::serde_utils::from_map_str_color;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -69,7 +72,7 @@ pub struct Property {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum PropertyValue {
-    #[serde(deserialize_with = "from_str_color")]
+    #[serde(deserialize_with = "from_map_str_color")]
     Color {
         r: f64,
         g: f64,
@@ -142,7 +145,7 @@ pub struct Preset {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum PresetValue {
-    #[serde(deserialize_with = "from_str_color")]
+    #[serde(deserialize_with = "from_map_str_color")]
     Color {
         r: f64,
         g: f64,
@@ -154,63 +157,4 @@ pub enum PresetValue {
     Integer {
         value: i64,
     },
-}
-
-fn from_str_color<'de, D>(deserializer: D) -> Result<(f64, f64, f64), D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let map: HashMap<String, String> = Deserialize::deserialize(deserializer)?;
-    let s = map.get("value").ok_or(Error::missing_field("value"))?;
-
-    let parts = s
-        .split(' ')
-        .map(f64::from_str)
-        .map(|f| f.map_err(Error::custom))
-        .collect::<Result<Vec<_>, _>>()?;
-
-    if parts.len() == 3 {
-        Ok((parts[0], parts[1], parts[1]))
-    } else {
-        Err(Error::invalid_length(parts.len(), &"3 floats"))
-    }
-}
-
-fn as_str_opt<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    match serde_this_or_that::as_string(deserializer) {
-        Ok(s) => Ok(Some(s)),
-        Err(_) => Ok(None),
-    }
-}
-
-fn as_u64_opt<'de, D>(deserializer: D) -> Result<Option<u64>, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    match serde_this_or_that::as_u64(deserializer) {
-        Ok(u) => Ok(Some(u)),
-        Err(_) => Ok(None),
-    }
-}
-
-fn as_wp_type<'de, D>(deserializer: D) -> Result<WallpaperType, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let string: Result<String, _> = Deserialize::deserialize(deserializer);
-    match string {
-        Ok(str) => match str.to_lowercase().as_str() {
-            "video" => Ok(WallpaperType::Video),
-            "scene" => Ok(WallpaperType::Scene),
-            "web" => Ok(WallpaperType::Web),
-            _ => Err(Error::invalid_value(
-                Unexpected::Str(&str),
-                &"Either video, scene, web or preset",
-            )),
-        },
-        Err(a) => Err(a),
-    }
 }
