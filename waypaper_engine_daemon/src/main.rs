@@ -9,13 +9,11 @@ mod app_state;
 mod egl;
 mod file_reading_utils;
 mod mpv;
-mod project;
 mod scene;
 mod scene_package;
 mod tex_file;
 mod wallpaper;
 mod wl_renderer;
-mod serde_utils;
 mod ipc;
 
 const WP_DIR: &str = "/home/flashonfire/.steam/steam/steamapps/workshop/content/431960/";

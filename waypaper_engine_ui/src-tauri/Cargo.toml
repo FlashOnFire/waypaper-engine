@@ -1,5 +1,5 @@
 [package]
-name = "waypaper-engine-ui"
+name = "waypaper_engine_ui"
 version = "0.1.0"
 authors = ["FlashOnFire"]
 edition = "2021"
@@ -19,3 +19,4 @@ serde-this-or-that = "0.4.2"
 base64 = "0.22.1"
 linux-ipc = "0.2.1"
 
+waypaper_engine_shared = {path = "../../waypaper_engine_shared"}

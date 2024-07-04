@@ -1,5 +1,5 @@
 use linux_ipc::IpcChannel;
-use crate::project::{WallpaperType, WEProject};
+use waypaper_engine_shared::project::{WallpaperType, WEProject};
 use serde::Serialize;
 use std::error::Error;
 use std::fs;
@@ -11,9 +11,6 @@ use std::sync::Mutex;
 use tauri::{Manager, State, Window};
 
 use base64::{engine::general_purpose::STANDARD, Engine as _};
-
-mod project;
-mod serde_utils;
 
 #[tauri::command]
 fn set_wp(wp_id: u64, screen: String, channel: State<Mutex<IpcChannel>>) {

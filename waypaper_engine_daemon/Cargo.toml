@@ -1,5 +1,5 @@
 [package]
-name = "waypaper-engine-daemon"
+name = "waypaper_engine_daemon"
 version = "0.1.0"
 authors = ["FlashOnFire"]
 edition = "2021"
@@ -23,3 +23,5 @@ smithay-client-toolkit = "0.18.1"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 wayland-egl = "0.32.0"
+
+waypaper_engine_shared = {path = "../waypaper_engine_shared"}

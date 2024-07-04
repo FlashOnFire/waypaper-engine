@@ -1,0 +1,9 @@
+[package]
+name = "waypaper_engine_shared"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+serde = { version = "1.0.203", features = ["derive"] }
+cgmath = "0.18.0"
+serde-this-or-that = "0.4.2"

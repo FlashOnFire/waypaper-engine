@@ -1,5 +1,5 @@
 use crate::ipc::IPCRequest;
-use crate::project::WEProject;
+use waypaper_engine_shared::project::WEProject;
 use crate::wallpaper::Wallpaper;
 use crate::wl_renderer::RenderingContext;
 use crate::WP_DIR;

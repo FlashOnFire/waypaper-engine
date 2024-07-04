@@ -3,7 +3,7 @@ use cgmath::{Vector2, Vector3};
 use serde::Deserialize;
 use serde_json::Value;
 
-use crate::serde_utils::{as_vec2f32, as_vec3f32, from_str_color};
+use waypaper_engine_shared::serde_utils::{as_vec2f32, as_vec3f32, from_str_color};
 use serde_this_or_that::as_bool;
 
 #[derive(Debug, Clone, Deserialize)]

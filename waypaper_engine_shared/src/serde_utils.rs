@@ -28,8 +28,8 @@ where
 }
 
 pub fn from_str_color<'de, D>(deserializer: D) -> Result<(f64, f64, f64), D::Error>
-    where
-        D: Deserializer<'de>,
+where
+    D: Deserializer<'de>,
 {
     let s: String = Deserialize::deserialize(deserializer)?;
 
@@ -105,8 +105,8 @@ where
 }
 
 pub fn as_vec2f32<'de, D>(deserializer: D) -> Result<Vector2<f32>, D::Error>
-    where
-        D: Deserializer<'de>,
+where
+    D: Deserializer<'de>,
 {
     let s: String = Deserialize::deserialize(deserializer)?;
 

@@ -2,14 +2,14 @@ target
 .direnv
 .idea
 
-waypaper-engine-ui/logs
+waypaper_engine_ui/logs
 waypaper-engine-ui/*.log
-waypaper-engine-ui/pnpm-debug.log*
+waypaper_engine_ui/pnpm-debug.log*
 
-waypaper-engine-ui/node_modules
-waypaper-engine-ui/dist
-waypaper-engine-ui/dist-ssr
+waypaper_engine_ui/node_modules
+waypaper_engine_ui/dist
+waypaper_engine_ui/dist-ssr
 waypaper-engine-ui/*.local
-waypaper-engine-ui/src-tauri/gen/schemas
+waypaper_engine_ui/src-tauri/gen/schemas
 
 tests

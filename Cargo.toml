@@ -1,6 +1,6 @@
 [workspace]
 members = [
-    "waypaper-engine-daemon",
-    "waypaper-engine-ui/src-tauri",
+    "waypaper_engine_daemon", "waypaper_engine_shared",
+    "waypaper_engine_ui/src-tauri",
 ]
 resolver = "2"

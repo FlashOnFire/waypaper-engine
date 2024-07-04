@@ -4791,7 +4791,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "waypaper-engine-daemon"
+name = "waypaper_engine_daemon"
 version = "0.1.0"
 dependencies = [
  "bitflags 2.6.0",
@@ -4812,10 +4812,20 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "wayland-egl",
+ "waypaper_engine_shared",
 ]
 
 [[package]]
-name = "waypaper-engine-ui"
+name = "waypaper_engine_shared"
+version = "0.1.0"
+dependencies = [
+ "cgmath",
+ "serde",
+ "serde-this-or-that",
+]
+
+[[package]]
+name = "waypaper_engine_ui"
 version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
@@ -4827,6 +4837,7 @@ dependencies = [
  "tauri",
  "tauri-build",
  "tauri-plugin-shell",
+ "waypaper_engine_shared",
 ]
 
 [[package]]
