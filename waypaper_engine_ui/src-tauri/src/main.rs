@@ -54,8 +54,9 @@ fn loaded(
     wallpaper_infos: State<Mutex<Vec<WPInfo>>>,
 ) {
     let mut wallpapers = wallpapers.lock().unwrap();
+    let wpe_dir = waypaper_engine_shared::get_wpe_dir();
 
-    for entry in fs::read_dir(WP_DIR).unwrap().flatten() {
+    for entry in fs::read_dir(wpe_dir.clone()).unwrap().flatten() {
         if let Ok(aa) = File::open(entry.path().join("project.json")) {
             if let Ok(mut project) = serde_json::from_reader::<File, WEProject>(aa) {
                 if project.workshop_id.is_none() {
@@ -75,7 +76,7 @@ fn loaded(
         .map(|project| {
             let id = project.workshop_id.unwrap();
 
-            let preview_path = PathBuf::from(WP_DIR)
+            let preview_path = wpe_dir
                 .join(id.to_string())
                 .join(&project.preview);
 
@@ -93,8 +94,6 @@ fn loaded(
 
     window.emit("setWPs", wallpaper_infos.deref()).unwrap();
 }
-
-const WP_DIR: &str = "/home/flashonfire/.steam/steam/steamapps/workshop/content/431960/";
 
 fn main() -> Result<(), Box<dyn Error>> {
     let wallpapers: Mutex<Vec<WEProject>> = Mutex::new(vec![]);
