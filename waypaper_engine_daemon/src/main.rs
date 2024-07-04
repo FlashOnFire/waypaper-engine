@@ -14,7 +14,6 @@ mod scene_package;
 mod tex_file;
 mod wallpaper;
 mod wl_renderer;
-mod ipc;
 
 const WP_DIR: &str = "/home/flashonfire/.steam/steam/steamapps/workshop/content/431960/";
 

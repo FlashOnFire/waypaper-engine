@@ -1,5 +1,4 @@
 use linux_ipc::IpcChannel;
-use waypaper_engine_shared::project::{WallpaperType, WEProject};
 use serde::Serialize;
 use std::error::Error;
 use std::fs;
@@ -9,14 +8,21 @@ use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use tauri::{Manager, State, Window};
+use waypaper_engine_shared::project::{WEProject, WallpaperType};
 
 use base64::{engine::general_purpose::STANDARD, Engine as _};
+use waypaper_engine_shared::ipc::IPCRequest;
 
 #[tauri::command]
 fn set_wp(wp_id: u64, screen: String, channel: State<Mutex<IpcChannel>>) {
     println!("set wp {:?} {}", wp_id, screen);
-    let response = channel.lock().unwrap().send::<_, String>(format!("setWP {:?} {}", wp_id, screen)).expect("Failed to send message");
-
+    //let response = channel.lock().unwrap().send::<_, String>(format!("setWP {:?} {}", wp_id, screen)).expect("Failed to send message");
+    let response = channel
+        .lock()
+        .unwrap()
+        .send::<_, IPCRequest>(IPCRequest::SetWP { id: wp_id, screen })
+        .expect("Failed to send message");
+    
     if let Some(response) = response {
         println!("Received: {:#?}", response);
     }

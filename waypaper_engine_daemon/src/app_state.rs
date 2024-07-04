@@ -1,5 +1,3 @@
-use crate::ipc::IPCRequest;
-use waypaper_engine_shared::project::WEProject;
 use crate::wallpaper::Wallpaper;
 use crate::wl_renderer::RenderingContext;
 use crate::WP_DIR;
@@ -11,7 +9,8 @@ use std::str::FromStr;
 use std::sync::mpsc;
 use std::sync::mpsc::TryRecvError;
 use std::thread;
-
+use waypaper_engine_shared::ipc::IPCRequest;
+use waypaper_engine_shared::project::WEProject;
 
 pub struct AppState {
     rendering_context: RenderingContext,
@@ -33,21 +32,11 @@ impl AppState {
 
             loop {
                 let (response, reply) = channel
-                    .receive::<String, String>()
+                    .receive::<IPCRequest, String>()
                     .expect("Failed to create channel");
 
-                tracing::debug!("Received msg : [{}]", response);
-                let parts: Vec<&str> = response.split(' ').collect();
-
-                if parts.len() == 3 && parts.first().unwrap() == &"setWP" {
-                    if let Ok(id) = u64::from_str(parts.get(1).unwrap()) {
-                        tx.send(IPCRequest::SetWP {
-                            id,
-                            screen: parts.get(2).unwrap().to_string(),
-                        })
-                            .unwrap();
-                    }
-                }
+                tracing::debug!("Received msg : [{:?}]", response);
+                tx.send(response).unwrap();
             }
         });
 
