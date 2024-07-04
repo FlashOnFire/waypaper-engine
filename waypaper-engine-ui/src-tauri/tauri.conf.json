@@ -1,0 +1,27 @@
+{
+  "productName": "waypaper-engine-ui",
+  "version": "0.0.0",
+  "identifier": "fr.flashonfire.waypaperengine",
+  "build": {
+    "frontendDist": "../src"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "title": "Waypaper Engine",
+        "width": 1700,
+        "height": 800
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+    ]
+  }
+}

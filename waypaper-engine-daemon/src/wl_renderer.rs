@@ -4,7 +4,13 @@ use std::rc::Rc;
 
 use fps_counter::FPSCounter;
 use gl::COLOR_BUFFER_BIT;
-use khronos_egl::{ATTRIB_NONE, Surface};
+use khronos_egl::{Surface, ATTRIB_NONE};
+use smithay_client_toolkit::output::OutputInfo;
+use smithay_client_toolkit::reexports::client::globals::{registry_queue_init, GlobalList};
+use smithay_client_toolkit::reexports::client::protocol::wl_output::WlOutput;
+use smithay_client_toolkit::reexports::client::protocol::{wl_output, wl_seat, wl_surface};
+use smithay_client_toolkit::reexports::client::{Connection, EventQueue, Proxy, QueueHandle};
+use smithay_client_toolkit::shell::wlr_layer::Anchor;
 use smithay_client_toolkit::{
     compositor::{CompositorHandler, CompositorState},
     delegate_compositor, delegate_layer, delegate_output, delegate_registry, delegate_seat,
@@ -13,19 +19,13 @@ use smithay_client_toolkit::{
     registry_handlers,
     seat::{Capability, SeatHandler, SeatState},
     shell::{
-        WaylandSurface,
         wlr_layer::{
             KeyboardInteractivity, Layer, LayerShell, LayerShellHandler, LayerSurface,
             LayerSurfaceConfigure,
         },
+        WaylandSurface,
     },
 };
-use smithay_client_toolkit::output::OutputInfo;
-use smithay_client_toolkit::reexports::client::{Connection, EventQueue, Proxy, QueueHandle};
-use smithay_client_toolkit::reexports::client::globals::{GlobalList, registry_queue_init};
-use smithay_client_toolkit::reexports::client::protocol::{wl_output, wl_seat, wl_surface};
-use smithay_client_toolkit::reexports::client::protocol::wl_output::WlOutput;
-use smithay_client_toolkit::shell::wlr_layer::Anchor;
 use wayland_egl::WlEglSurface;
 
 use crate::egl::EGLState;
@@ -61,17 +61,13 @@ impl RenderingContext {
         }
     }
 
-    pub fn loop_fn(&mut self) {
-        loop {
-            self.event_queue
-                .blocking_dispatch(&mut self.wl_state)
-                .unwrap();
+    pub fn tick(&mut self) {
+        self.event_queue.roundtrip(&mut self.wl_state).unwrap(); // FIXME: roundtrip is probably overkill but we can't use blocking_dispatch and dispatch_pending causes frame drops
 
-            if self.wl_state.layers.values().any(|layer| layer.exit) {
-                tracing::debug!("Exiting");
-                break;
-            }
-        }
+        /*if self.wl_state.layers.values().any(|layer| layer.exit) {
+            tracing::debug!("Exiting");
+            break;
+        }*/
     }
 
     pub fn get_outputs(&mut self) -> OutputsList {
@@ -98,11 +94,12 @@ impl RenderingContext {
     ) {
         let output_name = output.1.name.as_ref().unwrap();
 
-        let layer: &mut SimpleLayer = if self.wl_state.layers.contains_key(&output_name.clone()) {
-            self.wl_state.layers.get_mut(output_name).unwrap()
-        } else {
-            self.wl_state.setup_layer(output)
-        };
+        if self.wl_state.layers.contains_key(&output_name.clone()) {
+            self.wl_state.layers.remove(output_name);
+            self.tick();
+        }
+
+        let layer = self.wl_state.setup_layer(output);
 
         self.egl_state.attach_context(layer.egl_window_surface);
         wallpaper.init_render();
@@ -196,7 +193,6 @@ impl WLState {
             //keyboard: None,
             //keyboard_focus: false,
             //pointer: None,
-            //mpv_renderer,
             egl_state: self.egl_state.clone(),
             _wl_egl_surface: wl_egl_surface,
             egl_window_surface,
@@ -294,11 +290,13 @@ impl CompositorHandler for WLState {
         surface: &wl_surface::WlSurface,
         _time: u32,
     ) {
-        self.layers
+        if let Some(layer) = self
+            .layers
             .values_mut()
             .find(|layer| layer.layer.wl_surface() == surface)
-            .unwrap()
-            .draw(qh);
+        {
+            layer.draw(qh);
+        }
     }
 }
 

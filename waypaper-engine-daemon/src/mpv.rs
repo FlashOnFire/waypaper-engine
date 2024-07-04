@@ -12,11 +12,11 @@ fn get_proc_address(egl: &Rc<Instance<Static>>, name: &str) -> *mut c_void {
 }
 
 pub struct MpvRenderer {
-    connection: Rc<Connection>,
+    pub render_context: Option<RenderContext>,
     egl: Rc<Instance<Static>>,
     mpv: Mpv,
+    connection: Rc<Connection>,
     video_path: PathBuf,
-    pub render_context: Option<RenderContext>,
     started_playback: bool,
 }
 
@@ -35,6 +35,7 @@ impl MpvRenderer {
         // mpv.set_property("fbo-format", "rgba8").unwrap(); // FrameBuffer format (worse quality when setting it and I don't know why it works without, but it works)
         mpv.set_property("vo", "libmpv").unwrap(); // Rendering through libmpv
         mpv.set_property("hwdec", "auto").unwrap(); // Auto-Detect Hardware Decoding
+        mpv.set_property("gpu-hwdec-interop", "vaapi").unwrap(); // Fix to avoid mpv crashing when libcuda is not found (todo: test if this workaround doesn't affect machines running on nvidia gpus)
 
         mpv.set_property("loop", "inf").unwrap(); // Play video in loop
 

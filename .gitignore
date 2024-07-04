@@ -1,7 +1,15 @@
-/target
-.idea
+target
 .direnv
-result
+.idea
 
-# Used for testing
+waypaper-engine-ui/logs
+waypaper-engine-ui/*.log
+waypaper-engine-ui/pnpm-debug.log*
+
+waypaper-engine-ui/node_modules
+waypaper-engine-ui/dist
+waypaper-engine-ui/dist-ssr
+waypaper-engine-ui/*.local
+waypaper-engine-ui/src-tauri/gen/schemas
+
 tests
