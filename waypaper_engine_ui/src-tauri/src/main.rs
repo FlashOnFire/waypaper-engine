@@ -15,8 +15,6 @@ use waypaper_engine_shared::ipc::IPCRequest;
 
 #[tauri::command]
 fn set_wp(wp_id: u64, screen: String, channel: State<Mutex<IpcChannel>>) {
-    println!("set wp {:?} {}", wp_id, screen);
-    //let response = channel.lock().unwrap().send::<_, String>(format!("setWP {:?} {}", wp_id, screen)).expect("Failed to send message");
     let response = channel
         .lock()
         .unwrap()
@@ -119,7 +117,7 @@ pub fn to_base64(path: &Path) -> String {
     let mut file_type: String = path.extension().unwrap().to_str().unwrap().to_owned();
 
     if file_type == "jpg" {
-        file_type = "jpeg".to_owned();
+        "jpeg".clone_into(&mut file_type);
     }
 
     assert!(file_type == "jpeg" || file_type == "gif" || file_type == "png");

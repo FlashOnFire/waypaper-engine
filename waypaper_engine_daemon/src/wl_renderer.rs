@@ -182,8 +182,6 @@ impl WLState {
         layer.commit();
         self.connection.roundtrip().unwrap();
 
-        self.egl_state.attach_context(egl_window_surface);
-
         let simple_layer = SimpleLayer {
             exit: false,
             first_configure: true,
