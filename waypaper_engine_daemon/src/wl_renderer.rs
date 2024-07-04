@@ -52,6 +52,8 @@ impl RenderingContext {
             &globals,
             queue_handle,
         );
+        
+        tracing::info!("Created WL state");
 
         Self {
             connection,

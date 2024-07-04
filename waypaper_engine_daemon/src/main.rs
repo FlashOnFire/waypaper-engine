@@ -1,5 +1,5 @@
 use std::error::Error;
-
+use std::path::PathBuf;
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::EnvFilter;
 
@@ -15,7 +15,7 @@ mod tex_file;
 mod wallpaper;
 mod wl_renderer;
 
-const WP_DIR: &str = "/home/flashonfire/.steam/steam/steamapps/workshop/content/431960/";
+const WPE_DIR: &str = ".steam/steam/steamapps/workshop/content/431960/";
 
 fn main() -> Result<(), Box<dyn Error>> {
     tracing_subscriber::fmt()
@@ -26,6 +26,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         )
         .init();
 
-    let mut app = AppState::new();
+    let wpe_dir = PathBuf::from(std::env::var("HOME").expect("No HOME environment variable set ?")).join(WPE_DIR);
+    assert!(wpe_dir.exists() && wpe_dir.is_dir(), "Wallpaper Engine folder not found (tried path: {})", wpe_dir.to_string_lossy());
+    
+    let mut app = AppState::new(wpe_dir);
     app.run()
 }

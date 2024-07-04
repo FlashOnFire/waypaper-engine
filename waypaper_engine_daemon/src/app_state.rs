@@ -1,24 +1,30 @@
-use crate::wallpaper::Wallpaper;
-use crate::wl_renderer::RenderingContext;
-use crate::WP_DIR;
-use linux_ipc::IpcChannel;
 use std::error::Error;
 use std::ffi::OsStr;
-use std::path::Path;
+use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::mpsc;
 use std::sync::mpsc::TryRecvError;
 use std::thread;
+
+use linux_ipc::IpcChannel;
+
 use waypaper_engine_shared::ipc::IPCRequest;
 use waypaper_engine_shared::project::WEProject;
 
+use crate::wallpaper::Wallpaper;
+use crate::wl_renderer::RenderingContext;
+
 pub struct AppState {
+    wpe_dir: PathBuf,
     rendering_context: RenderingContext,
 }
 
 impl AppState {
-    pub fn new() -> Self {
+    pub fn new(wpe_dir: PathBuf) -> Self {
+        tracing::debug!("Using wallpaper engine workshop path {}", wpe_dir.to_string_lossy());
+        
         AppState {
+            wpe_dir,
             rendering_context: RenderingContext::new(),
         }
     }
@@ -49,7 +55,7 @@ impl AppState {
                             .iter()
                             .find(|output| output.1.name.as_ref().unwrap() == &screen)
                         {
-                            let path = Path::new(WP_DIR).join(id.to_string());
+                            let path = self.wpe_dir.join(id.to_string());
                             if path.exists() && path.is_dir() {
                                 let mut wallpaper = Wallpaper::new(
                                     self.rendering_context.connection.clone(),
@@ -75,7 +81,8 @@ impl AppState {
                                 }
 
                                 if let Wallpaper::Video { ref project, .. } = wallpaper {
-                                    let path = Path::new(WP_DIR)
+                                    let path = self
+                                        .wpe_dir
                                         .join(project.workshop_id.unwrap().to_string())
                                         .join(project.file.as_ref().unwrap());
 
