@@ -21,6 +21,16 @@ window.addEventListener("DOMContentLoaded", async () => {
     let screen_selector = document.querySelector(".screen-selector");
     let search_input = document.querySelector(".search-input");
 
+    let screens = await invoke("get_screens", {});
+    console.dir(screens);
+    let frag = document.createDocumentFragment();
+    for (const screen of screens) {
+        frag.appendChild(create("<option>" + screen + "<option>"));
+    }
+    screen_selector.replaceChildren(frag);
+
+    screen_selector.querySelector("option:empty").remove();
+
     await listen('setWPs', (event) => {
         let frag = document.createDocumentFragment();
         let ids = [];

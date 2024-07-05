@@ -1,17 +1,26 @@
-use linux_ipc::IpcChannel;
-use serde::Serialize;
 use std::error::Error;
 use std::fs;
 use std::fs::File;
 use std::io::Read;
 use std::ops::Deref;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Mutex;
-use tauri::{Manager, State, Window};
-use waypaper_engine_shared::project::{WEProject, WallpaperType};
 
-use base64::{engine::general_purpose::STANDARD, Engine as _};
+use base64::{Engine as _, engine::general_purpose::STANDARD};
+use linux_ipc::IpcChannel;
+use serde::Serialize;
+use tauri::{Manager, State, Window};
+use xrandr_parser::Parser;
+
 use waypaper_engine_shared::ipc::IPCRequest;
+use waypaper_engine_shared::project::{WallpaperType, WEProject};
+
+#[tauri::command]
+fn get_screens(xrandr: State<Mutex<Parser>>) -> Vec<String> {
+    let mut xrandr = xrandr.lock().unwrap();
+    xrandr.parse().unwrap();
+    xrandr.connected_outputs.clone()
+}
 
 #[tauri::command]
 fn set_wp(wp_id: u64, screen: String, channel: State<Mutex<IpcChannel>>) {
@@ -20,7 +29,7 @@ fn set_wp(wp_id: u64, screen: String, channel: State<Mutex<IpcChannel>>) {
         .unwrap()
         .send::<_, IPCRequest>(IPCRequest::SetWP { id: wp_id, screen })
         .expect("Failed to send message");
-    
+
     if let Some(response) = response {
         println!("Received: {:#?}", response);
     }
@@ -76,9 +85,7 @@ fn loaded(
         .map(|project| {
             let id = project.workshop_id.unwrap();
 
-            let preview_path = wpe_dir
-                .join(id.to_string())
-                .join(&project.preview);
+            let preview_path = wpe_dir.join(id.to_string()).join(&project.preview);
 
             let b64 = to_base64(&preview_path);
 
@@ -102,10 +109,16 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
-        .invoke_handler(tauri::generate_handler![loaded, set_wp, apply_filter])
+        .invoke_handler(tauri::generate_handler![
+            loaded,
+            get_screens,
+            set_wp,
+            apply_filter
+        ])
         .manage(wallpapers)
         .manage(wallpaper_infos)
         .manage(channel)
+        .manage(Mutex::new(Parser::new()))
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 

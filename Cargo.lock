@@ -750,6 +750,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "derive_setters"
+version = "0.1.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4e8ef033054e131169b8f0f9a7af8f5533a9436fadf3c500ed547f730f07090d"
+dependencies = [
+ "darling",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.68",
+]
+
+[[package]]
 name = "digest"
 version = "0.10.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4838,6 +4850,7 @@ dependencies = [
  "tauri-build",
  "tauri-plugin-shell",
  "waypaper_engine_shared",
+ "xrandr-parser",
 ]
 
 [[package]]
@@ -5378,6 +5391,16 @@ name = "xml-rs"
 version = "0.8.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "791978798f0597cfc70478424c2b4fdc2b7a8024aaff78497ef00f24ef674193"
+
+[[package]]
+name = "xrandr-parser"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5af43ba661cee58bd86b9f81a899e45a15ac7f42fa4401340f73c0c2950030c1"
+dependencies = [
+ "derive_setters",
+ "serde",
+]
 
 [[package]]
 name = "zune-core"

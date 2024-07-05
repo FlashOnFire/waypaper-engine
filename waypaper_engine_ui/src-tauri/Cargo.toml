@@ -18,5 +18,6 @@ serde_utils = "0.6.2"
 serde-this-or-that = "0.4.2"
 base64 = "0.22.1"
 linux-ipc = "0.2.1"
+xrandr-parser = "0.3.0"
 
 waypaper_engine_shared = {path = "../../waypaper_engine_shared"}
