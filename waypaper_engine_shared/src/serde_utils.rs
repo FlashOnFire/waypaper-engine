@@ -122,4 +122,3 @@ where
         Err(Error::invalid_length(parts.len(), &"2 floats"))
     }
 }
-

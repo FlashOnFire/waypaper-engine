@@ -21,8 +21,11 @@ pub struct AppState {
 
 impl AppState {
     pub fn new(wpe_dir: PathBuf) -> Self {
-        tracing::debug!("Using wallpaper engine workshop path {}", wpe_dir.to_string_lossy());
-        
+        tracing::debug!(
+            "Using wallpaper engine workshop path {}",
+            wpe_dir.to_string_lossy()
+        );
+
         AppState {
             wpe_dir,
             rendering_context: RenderingContext::new(),
@@ -37,12 +40,13 @@ impl AppState {
             tracing::info!("Started IPC channel");
 
             loop {
-                let (response, reply) = channel
-                    .receive::<IPCRequest, String>()
-                    .expect("Failed to create channel");
-
-                tracing::debug!("Received msg : [{:?}]", response);
-                tx.send(response).unwrap();
+                match channel.receive::<IPCRequest, String>() {
+                    Ok((response, reply)) => {
+                        tracing::debug!("Received msg : [{:?}]", response);
+                        tx.send(response).unwrap();
+                    }
+                    Err(err) => tracing::warn!("IPC Received invalid data (Error: {})", err),
+                }
             }
         });
 

@@ -1,10 +1,11 @@
 use std::collections::HashMap;
+
 use cgmath::{Vector2, Vector3};
 use serde::Deserialize;
 use serde_json::Value;
+use serde_this_or_that::as_bool;
 
 use waypaper_engine_shared::serde_utils::{as_vec2f32, as_vec3f32, from_str_color};
-use serde_this_or_that::as_bool;
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -107,6 +108,6 @@ pub enum ObjectValue {
         model: Option<String>,
         particle: String,
         #[serde(alias = "instanceoverride")]
-        instance_override: HashMap<String, Value>
-    }
+        instance_override: HashMap<String, Value>,
+    },
 }

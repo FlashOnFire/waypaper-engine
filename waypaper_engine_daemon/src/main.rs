@@ -1,5 +1,5 @@
 use std::error::Error;
-use std::path::PathBuf;
+
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::EnvFilter;
 
@@ -23,7 +23,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 .from_env_lossy(),
         )
         .init();
-    
+
     let mut app = AppState::new(waypaper_engine_shared::get_wpe_dir());
     app.run()
 }
