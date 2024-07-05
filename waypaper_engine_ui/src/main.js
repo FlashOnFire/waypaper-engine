@@ -43,7 +43,7 @@ window.addEventListener("DOMContentLoaded", async () => {
         grid.replaceChildren(frag);
 
         for (const id of ids) {
-            document.getElementById(id).addEventListener("click", async (mouse_event) => {
+            document.getElementById(id).addEventListener("click", async (/*mouse_event*/) => {
                 await invoke("set_wp", {wpId: id, screen: screen_selector.textContent})
             });
         }
