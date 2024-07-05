@@ -52,6 +52,7 @@
               libGL
               libxkbcommon
               wayland
+              webkitgtk_4_1
             ];
 
             LD_LIBRARY_PATH = lib.makeLibraryPath buildInputs;
