@@ -4,7 +4,7 @@ use std::rc::Rc;
 
 use fps_counter::FPSCounter;
 use gl::COLOR_BUFFER_BIT;
-use khronos_egl::{ATTRIB_NONE, Surface};
+use khronos_egl::ATTRIB_NONE;
 use smithay_client_toolkit::{
     compositor::{CompositorHandler, CompositorState},
     delegate_compositor, delegate_layer, delegate_output, delegate_registry, delegate_seat,
@@ -41,7 +41,7 @@ pub struct RenderingContext {
 impl RenderingContext {
     pub fn new() -> Self {
         let connection = Rc::new(Connection::connect_to_env().unwrap());
-        let egl_state = Rc::new(EGLState::new(&connection));
+        let egl_state = Rc::new(EGLState::new(connection.clone()));
         let (globals, event_queue): (GlobalList, EventQueue<WLState>) =
             registry_queue_init(&connection).unwrap();
         let queue_handle = event_queue.handle();
@@ -94,20 +94,22 @@ impl RenderingContext {
         output: (&WlOutput, &OutputInfo),
         mut wallpaper: Wallpaper,
     ) {
-        let output_name = output.1.name.as_ref().unwrap();
+        let output_name = output.1.name.clone().unwrap();
 
         if self.wl_state.layers.contains_key(&output_name.clone()) {
-            self.wl_state.layers.remove(output_name);
+            self.wl_state.layers.remove(&output_name);
             self.tick();
         }
 
-        let layer = self.wl_state.setup_layer(output);
+        let mut layer = self.wl_state.setup_layer(output);
 
         self.egl_state.attach_context(layer.egl_window_surface);
         wallpaper.init_render();
         self.egl_state.detach_context();
 
         layer.wallpaper = Some(wallpaper);
+
+        self.wl_state.layers.insert(output_name, layer);
     }
 }
 
@@ -147,8 +149,11 @@ impl WLState {
         }
     }
 
-    pub fn setup_layer(&mut self, output: (&WlOutput, &OutputInfo)) -> &mut SimpleLayer {
-        let surface = self.compositor_state.create_surface(&self.queue_handle);
+    pub fn setup_layer(&mut self, output: (&WlOutput, &OutputInfo)) -> SimpleLayer {
+        let surface: smithay_client_toolkit::compositor::Surface = self
+            .compositor_state
+            .create_surface(&self.queue_handle)
+            .into();
 
         let output_size = output.1.logical_size.unwrap();
 
@@ -184,7 +189,7 @@ impl WLState {
         layer.commit();
         self.connection.roundtrip().unwrap();
 
-        let simple_layer = SimpleLayer {
+        SimpleLayer {
             exit: false,
             first_configure: true,
             width: output_size.0 as u32,
@@ -200,12 +205,16 @@ impl WLState {
 
             fps_counter: FPSCounter::new(),
             wallpaper: None,
-        };
+        }
+    }
+}
 
-        let output_name = output.1.name.as_ref().unwrap().clone();
-        self.layers.insert(output_name.clone(), simple_layer);
-
-        self.layers.get_mut(&output_name).unwrap()
+impl Drop for SimpleLayer {
+    fn drop(&mut self) {
+        self.egl_state
+            .egl
+            .destroy_surface(self.egl_state.egl_display, self.egl_window_surface)
+            .expect("Couldn't destroy surface");
     }
 }
 
@@ -257,7 +266,7 @@ pub struct SimpleLayer {
     //mpv_renderer: MpvRenderer,
     egl_state: Rc<EGLState>,
     _wl_egl_surface: WlEglSurface,
-    pub(crate) egl_window_surface: Surface,
+    pub(crate) egl_window_surface: khronos_egl::Surface,
     output: (WlOutput, OutputInfo),
 
     pub(crate) wallpaper: Option<Wallpaper>,

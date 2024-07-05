@@ -34,8 +34,9 @@ impl AppState {
 
     pub fn run(&mut self) -> Result<(), Box<dyn Error>> {
         let (tx, rx) = mpsc::channel::<IPCRequest>();
+        let (stop_tx, stop_rx) = oneshot::channel::<()>();
 
-        thread::spawn(move || {
+        let ipc_thread = thread::spawn(move || {
             let mut channel = IpcChannel::new("/tmp/waypaper-engine.sock").unwrap();
             tracing::info!("Started IPC channel");
 
@@ -47,9 +48,14 @@ impl AppState {
                     }
                     Err(err) => tracing::warn!("IPC Received invalid data (Error: {})", err),
                 }
+
+                if stop_rx.try_recv().is_ok() {
+                    break;
+                }
             }
         });
 
+        let mut i = 0;
         loop {
             match rx.try_recv() {
                 Ok(req) => match req {
@@ -58,7 +64,7 @@ impl AppState {
                         if let Some(output) = outputs
                             .iter()
                             .find(|output| output.1.name.as_ref().unwrap() == &screen)
-                        {
+                        {                          
                             let path = self.wpe_dir.join(id.to_string());
                             if path.exists() && path.is_dir() {
                                 let mut wallpaper = Wallpaper::new(
@@ -94,6 +100,7 @@ impl AppState {
                                         tracing::info!("Found video file ! (Path : {path:?})");
 
                                         self.rendering_context.set_wallpaper(output, wallpaper);
+                                        i += 1;
                                     }
                                 }
                             }
@@ -107,7 +114,16 @@ impl AppState {
             }
 
             self.rendering_context.tick();
+            
+            if i > 8 {
+                break;
+            }
         }
+
+        stop_tx.send(()).unwrap();
+        ipc_thread.join().unwrap();
+
+        Ok(())
     }
 }
 

@@ -10,6 +10,7 @@ pub fn get_proc_address(egl: &Rc<Instance<Static>>, name: &str) -> *mut c_void {
 }
 
 pub struct EGLState {
+    wl_connection: Rc<Connection>,
     pub(crate) egl: Rc<Instance<Static>>,
     pub(crate) egl_display: Display,
     pub(crate) egl_context: Context,
@@ -17,14 +18,14 @@ pub struct EGLState {
 }
 
 impl EGLState {
-    pub fn new(connection: &Connection) -> Self {
+    pub fn new(connection: Rc<Connection>) -> Self {
         let egl = Rc::new(Instance::new(Static));
 
         unsafe {
             let egl_display = egl
                 .get_display(connection.backend().display_ptr() as *mut c_void)
                 .unwrap();
-            egl.initialize(egl_display).unwrap();
+            egl.initialize(egl_display).expect("Couldn't initialize EGL Display");
 
             #[rustfmt::skip]
             let attributes = [
@@ -57,6 +58,7 @@ impl EGLState {
             gl::load_with(|str| get_proc_address(&egl, str));
 
             Self {
+                wl_connection: connection,
                 egl,
                 egl_display,
                 egl_context,
@@ -80,5 +82,15 @@ impl EGLState {
         self.egl
             .make_current(self.egl_display, None, None, None)
             .unwrap();
+    }
+}
+
+impl Drop for EGLState {
+    fn drop(&mut self) {
+        self.egl
+            .destroy_context(self.egl_display, self.egl_context)
+            .expect("Couldn't destroy EGL Context");
+        
+        self.egl.terminate(self.egl_display).expect("Couldn't destroy EGL Display");
     }
 }
