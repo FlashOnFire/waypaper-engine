@@ -30,6 +30,7 @@ use wayland_egl::WlEglSurface;
 
 use crate::egl::EGLState;
 use crate::wallpaper::Wallpaper;
+use crate::wallpaper_renderer::WPRenderer;
 
 pub struct RenderingContext {
     pub(crate) connection: Rc<Connection>,
@@ -92,24 +93,17 @@ impl RenderingContext {
     pub(crate) fn set_wallpaper(
         &mut self,
         output: (&WlOutput, &OutputInfo),
-        mut wallpaper: Wallpaper,
+        wallpaper: Wallpaper,
     ) {
         let output_name = output.1.name.clone().unwrap();
 
-        if self.wl_state.layers.contains_key(&output_name.clone()) {
-            self.wl_state.layers.remove(&output_name);
-            self.tick();
-        }
-
-        let mut layer = self.wl_state.setup_layer(output);
-
-        self.egl_state.attach_context(layer.egl_window_surface);
-        wallpaper.init_render();
-        self.egl_state.detach_context();
-
-        layer.wallpaper = Some(wallpaper);
-
-        self.wl_state.layers.insert(output_name, layer);
+        let layer = if self.wl_state.layers.contains_key(&output_name.clone()) {
+            self.wl_state.layers.get_mut(&output_name.clone()).unwrap()
+        } else {
+            self.wl_state.setup_layer(output)
+        };
+        
+        layer.set_wallpaper(wallpaper);
     }
 }
 
@@ -149,7 +143,7 @@ impl WLState {
         }
     }
 
-    pub fn setup_layer(&mut self, output: (&WlOutput, &OutputInfo)) -> SimpleLayer {
+    pub fn setup_layer(&mut self, output: (&WlOutput, &OutputInfo)) -> &mut SimpleLayer {
         let surface: smithay_client_toolkit::compositor::Surface = self
             .compositor_state
             .create_surface(&self.queue_handle)
@@ -189,7 +183,7 @@ impl WLState {
         layer.commit();
         self.connection.roundtrip().unwrap();
 
-        SimpleLayer {
+        let layer = SimpleLayer {
             exit: false,
             first_configure: true,
             width: output_size.0 as u32,
@@ -203,9 +197,13 @@ impl WLState {
             egl_window_surface,
             output: (output.0.clone(), output.1.clone()),
 
+            renderer: WPRenderer::new(self.connection.clone(), self.egl_state.clone()),
             fps_counter: FPSCounter::new(),
             wallpaper: None,
-        }
+        };
+        
+        self.layers.insert(output.1.name.as_ref().unwrap().clone(), layer);
+        self.layers.get_mut(output.1.name.as_ref().unwrap()).unwrap()
     }
 }
 
@@ -259,17 +257,18 @@ pub struct SimpleLayer {
     first_configure: bool,
     width: u32,
     height: u32,
-    pub(crate) layer: LayerSurface,
+    layer: LayerSurface,
     //keyboard: Option<wl_keyboard::WlKeyboard>,
     //keyboard_focus: bool,
     //pointer: Option<wl_pointer::WlPointer>,
     //mpv_renderer: MpvRenderer,
     egl_state: Rc<EGLState>,
     _wl_egl_surface: WlEglSurface,
-    pub(crate) egl_window_surface: khronos_egl::Surface,
+    egl_window_surface: khronos_egl::Surface,
     output: (WlOutput, OutputInfo),
 
-    pub(crate) wallpaper: Option<Wallpaper>,
+    renderer: WPRenderer,
+    wallpaper: Option<Wallpaper>,
     fps_counter: FPSCounter,
 }
 
@@ -423,6 +422,15 @@ impl SeatHandler for WLState {
 }
 
 impl SimpleLayer {
+    pub fn set_wallpaper(&mut self, wp: Wallpaper) {
+        self.renderer.setup_for(&wp);
+        self.wallpaper = Some(wp);
+
+        self.egl_state.attach_context(self.egl_window_surface);
+        self.renderer.init_render();
+        self.egl_state.detach_context();
+    }
+    
     pub fn draw(&mut self, qh: &QueueHandle<WLState>) {
         let width = self.width;
         let height = self.height;
@@ -433,18 +441,12 @@ impl SimpleLayer {
         // Draw to the window:
         {
             unsafe {
-                let clear_color = if let Some(wallpaper) = &self.wallpaper {
-                    wallpaper.clear_color()
-                } else {
-                    (0.0, 0.0, 0.0)
-                };
+                let clear_color = self.renderer.clear_color();
 
                 gl::ClearColor(clear_color.0, clear_color.1, clear_color.2, 1.0);
                 gl::Clear(COLOR_BUFFER_BIT);
 
-                if let Some(wallpaper) = self.wallpaper.as_mut() {
-                    wallpaper.render(self.width, self.height);
-                }
+                self.renderer.render(self.width, self.height);
             }
         }
 

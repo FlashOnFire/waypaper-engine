@@ -4841,6 +4841,7 @@ dependencies = [
  "cgmath",
  "serde",
  "serde-this-or-that",
+ "serde_json",
 ]
 
 [[package]]

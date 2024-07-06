@@ -1,20 +1,19 @@
 use std::error::Error;
-use std::fs::File;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
+use std::str::FromStr;
 
 use smithay_client_toolkit::reexports::client::Connection;
 
 use waypaper_engine_shared::project::{WallpaperType, WEProject};
 
 use crate::egl::EGLState;
-use crate::mpv::MpvRenderer;
 use crate::scene_package::ScenePackage;
 
 pub enum Wallpaper {
     Video {
+        base_dir_path: PathBuf,
         project: WEProject,
-        mpv_renderer: MpvRenderer,
     },
     Scene {
         project: WEProject,
@@ -30,25 +29,20 @@ pub enum Wallpaper {
 
 impl Wallpaper {
     pub fn new(
-        connection: Rc<Connection>,
-        egl_state: &Rc<EGLState>,
-        path: &Path,
+        path: PathBuf,
     ) -> Result<Wallpaper, Box<dyn Error>> {
-        let project_file = File::open(path.join("project.json"))?;
-        let project: WEProject = serde_json::from_reader(project_file)?;
+        let project = WEProject::new(
+            &path.join("project.json"),
+            u64::from_str(path.file_name().unwrap().to_str().unwrap()).unwrap(),
+        );
 
         Ok(match project.wallpaper_type {
             WallpaperType::Video => {
                 tracing::debug!("{}", project.file.as_ref().unwrap());
-                let mpv_renderer = MpvRenderer::new(
-                    connection,
-                    egl_state.egl.clone(),
-                    path.join(project.file.as_ref().unwrap()),
-                );
 
                 Wallpaper::Video {
+                    base_dir_path: path,
                     project,
-                    mpv_renderer,
                 }
             }
             WallpaperType::Scene => {
@@ -64,26 +58,13 @@ impl Wallpaper {
             WallpaperType::Preset => Wallpaper::Preset { project },
         })
     }
-
-    pub(crate) fn init_render(&mut self) {
+    
+    pub fn get_wp_type(&self) -> WallpaperType {
         match self {
-            Wallpaper::Video { mpv_renderer, .. } => mpv_renderer.init_rendering_context(),
-            Wallpaper::Scene { .. } => todo!(),
-            Wallpaper::Web { .. } => todo!(),
-            Wallpaper::Preset { .. } => todo!(),
-        }
-    }
-
-    pub(crate) fn clear_color(&self) -> (f32, f32, f32) {
-        (0.0, 0.0, 0.0)
-    }
-    pub(crate) fn render(&mut self, width: u32, height: u32) {
-        if let Wallpaper::Video {
-            ref mut mpv_renderer,
-            ..
-        } = self
-        {
-            mpv_renderer.render(width, height)
+            Wallpaper::Video { .. } => WallpaperType::Video,
+            Wallpaper::Scene { .. } => WallpaperType::Scene,
+            Wallpaper::Web { .. } => WallpaperType::Web,
+            Wallpaper::Preset { .. } => WallpaperType::Preset,
         }
     }
 }

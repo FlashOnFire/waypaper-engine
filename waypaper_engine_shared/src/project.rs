@@ -1,4 +1,6 @@
 use std::collections::HashMap;
+use std::fs::File;
+use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 use serde_this_or_that::{as_bool, as_f64, as_i64};
@@ -157,4 +159,17 @@ pub enum PresetValue {
     Integer {
         value: i64,
     },
+}
+
+impl WEProject {
+    pub fn new(path: &Path, id: u64) -> Self {
+        let project_file = File::open(path).unwrap();
+        let mut proj: WEProject = serde_json::from_reader(project_file).unwrap();
+        
+        if proj.workshop_id.is_none() {
+            proj.workshop_id = Some(id);
+        }
+        
+        proj
+    }
 }

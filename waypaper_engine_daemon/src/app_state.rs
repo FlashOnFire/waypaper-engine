@@ -67,28 +67,10 @@ impl AppState {
                         {                          
                             let path = self.wpe_dir.join(id.to_string());
                             if path.exists() && path.is_dir() {
-                                let mut wallpaper = Wallpaper::new(
-                                    self.rendering_context.connection.clone(),
-                                    &self.rendering_context.egl_state,
-                                    &path,
+                                let wallpaper = Wallpaper::new(
+                                    path,
                                 )
                                 .unwrap();
-                                let filename = path.file_name().unwrap();
-
-                                match wallpaper {
-                                    Wallpaper::Video {
-                                        ref mut project, ..
-                                    } => add_id(project, filename)?,
-                                    Wallpaper::Scene {
-                                        ref mut project, ..
-                                    } => add_id(project, filename)?,
-                                    Wallpaper::Web { ref mut project } => {
-                                        add_id(project, filename)?
-                                    }
-                                    Wallpaper::Preset { ref mut project } => {
-                                        add_id(project, filename)?
-                                    }
-                                }
 
                                 if let Wallpaper::Video { ref project, .. } = wallpaper {
                                     let path = self
@@ -125,12 +107,4 @@ impl AppState {
 
         Ok(())
     }
-}
-
-fn add_id(proj: &mut WEProject, filename: &OsStr) -> Result<(), Box<dyn Error>> {
-    if proj.workshop_id.is_none() {
-        proj.workshop_id = Some(u64::from_str(filename.to_str().unwrap())?);
-    }
-
-    Ok(())
 }

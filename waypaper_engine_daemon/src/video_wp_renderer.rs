@@ -6,22 +6,28 @@ use khronos_egl::{Context, Instance, Static};
 use libmpv2::Mpv;
 use libmpv2::render::{OpenGLInitParams, RenderContext, RenderParam, RenderParamApiType};
 use smithay_client_toolkit::reexports::client::Connection;
+use waypaper_engine_shared::project::WallpaperType;
+use crate::egl::EGLState;
+use crate::wallpaper::Wallpaper;
+use crate::wallpaper_renderer::WPRendererImpl;
 
 fn get_proc_address(egl: &Rc<Instance<Static>>, name: &str) -> *mut c_void {
     egl.get_proc_address(name).unwrap() as *mut c_void
 }
 
-pub struct MpvRenderer {
-    pub render_context: Option<RenderContext>,
-    egl: Rc<Instance<Static>>,
-    mpv: Mpv,
+pub struct VideoWPRenderer {
     connection: Rc<Connection>,
-    video_path: PathBuf,
+    egl_state: Rc<EGLState>,
+    
+    render_context: Option<RenderContext>,
+    mpv: Option<Mpv>,
+    
+    video_path: Option<PathBuf>,
     started_playback: bool,
 }
 
-impl MpvRenderer {
-    pub fn new(connection: Rc<Connection>, egl: Rc<Instance<Static>>, video_path: PathBuf) -> Self {
+impl VideoWPRenderer {
+    pub(crate) fn new(connection: Rc<Connection>, egl_state: Rc<EGLState>) -> Self {
         let mpv = Mpv::new().expect("Error while creating mpv");
 
         // Setting various properties
@@ -41,24 +47,38 @@ impl MpvRenderer {
 
         Self {
             connection,
-            egl,
-            mpv,
-            video_path,
+            egl_state,
             render_context: None,
+            mpv: Some(mpv),
+            video_path: None,
             started_playback: false,
         }
     }
+    
+    fn play_file(&self, file: &Path) {        
+        self.mpv.as_ref().unwrap()
+            .command(
+                "loadfile",
+                &[
+                    &("\"".to_owned() + &file.to_string_lossy() + "\""),
+                    "replace",
+                ],
+            )
+            .unwrap();
+    }
+}
 
-    pub fn init_rendering_context(&mut self) {
+impl WPRendererImpl for VideoWPRenderer {
+    fn init_render(&mut self) {
         unsafe {
             self.render_context = Some(
                 RenderContext::new(
-                    self.mpv.ctx.as_mut(),
+                    self.mpv.as_mut().unwrap().ctx.as_mut(),
                     vec![
                         RenderParam::ApiType(RenderParamApiType::OpenGl),
                         RenderParam::InitParams(OpenGLInitParams {
                             get_proc_address,
-                            ctx: self.egl.clone(),
+                            ctx: self.egl_state.egl.clone(),
                         }),
                         RenderParam::WaylandDisplay(
                             self.connection.backend().display_ptr() as *mut std::ffi::c_void
@@ -69,27 +89,22 @@ impl MpvRenderer {
             );
         }
     }
-    pub fn play_file(&self, file: &Path) {
-        self.mpv
-            .command(
-                "loadfile",
-                &[
-                    &("\"".to_owned() + &file.to_string_lossy() + "\""),
-                    "replace",
-                ],
-            )
-            .unwrap();
+
+    fn setup_wallpaper(&mut self, wp: &Wallpaper) {
+        match wp {
+            Wallpaper::Video { ref project, base_dir_path } => {
+                self.video_path = Some(base_dir_path.join(project.file.as_ref().unwrap()));
+                self.started_playback = false;
+            }
+            Wallpaper::Scene { .. } => {}
+            Wallpaper::Web { .. } => {}
+            Wallpaper::Preset { .. } => {}
+        }
     }
 
-    pub fn set_speed(&self, speed: f32) {
-        self.mpv
-            .set_property("speed", format!("{speed:.2}"))
-            .unwrap();
-    }
-
-    pub fn render(&mut self, width: u32, height: u32) {
+    fn render(&mut self, width: u32, height: u32) {
         if !self.started_playback {
-            self.play_file(&self.video_path);
+            self.play_file(self.video_path.as_ref().unwrap());
             self.started_playback = true;
         }
 
@@ -98,5 +113,9 @@ impl MpvRenderer {
             .unwrap()
             .render::<Context>(0, i32::try_from(width).unwrap(), height as i32, true)
             .unwrap()
+    }
+
+    fn get_wp_type(&self) -> WallpaperType {
+        WallpaperType::Video
     }
 }
