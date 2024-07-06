@@ -1,7 +1,5 @@
 use std::error::Error;
-use std::ffi::OsStr;
 use std::path::PathBuf;
-use std::str::FromStr;
 use std::sync::mpsc;
 use std::sync::mpsc::TryRecvError;
 use std::thread;
@@ -9,7 +7,6 @@ use std::thread;
 use linux_ipc::IpcChannel;
 
 use waypaper_engine_shared::ipc::IPCRequest;
-use waypaper_engine_shared::project::WEProject;
 
 use crate::wallpaper::Wallpaper;
 use crate::wl_renderer::RenderingContext;
