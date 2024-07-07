@@ -1,5 +1,4 @@
 use std::ffi::{c_void, CString};
-use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::ptr;
 use std::ptr::null;
@@ -136,8 +135,12 @@ struct RenderContext {
     program: GLuint,
     vao: GLuint,
     ebo: GLuint,
-    decoder: Option<Decoder>,
-    texture: Option<GLuint>,
+    data: Option<RenderData>,
+}
+
+struct RenderData {
+    decoder: Decoder,
+    texture: GLuint,
 }
 
 impl VideoWPRenderer2 {
@@ -154,24 +157,18 @@ impl VideoWPRenderer2 {
     fn play_file(&mut self, file: &Path) {
         let source = video_rs::Location::File(self.video_path.as_ref().unwrap().clone());
         let decoder = Decoder::new(source).expect("Failed to create decoder");
-
         let size = decoder.size_out();
 
         let ctx = self.render_context.as_mut().unwrap();
 
         unsafe {
-            if let Some(texture) = ctx.texture {
-                gl::DeleteTextures(1, &texture);
+            if let Some(data) = &ctx.data {
+                gl::DeleteTextures(1, &data.texture);
             }
 
             let mut texture: GLuint = 0;
             gl::GenTextures(1, &mut texture);
             gl::BindTexture(gl::TEXTURE_2D, texture);
-
-            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::REPEAT as GLint);
-            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::REPEAT as GLint);
-            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::NEAREST as GLint);
-            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::LINEAR as GLint);
 
             gl::TexImage2D(
                 gl::TEXTURE_2D,
@@ -184,9 +181,8 @@ impl VideoWPRenderer2 {
                 gl::UNSIGNED_BYTE,
                 null(),
             );
-            
-            ctx.decoder = Some(decoder);
-            ctx.texture = Some(texture);
+
+            ctx.data = Some(RenderData { decoder, texture });
         }
     }
 }
@@ -213,7 +209,6 @@ impl WPRendererImpl for VideoWPRenderer2 {
             let fragment_shader = compile_shader(FRAGMENT_SHADER_SRC, gl::FRAGMENT_SHADER);
 
             let program = link_program(vertex_shader, fragment_shader);
-            gl::UseProgram(program);
 
             gl::BindFragDataLocation(program, 0, CString::new("out_color").unwrap().as_ptr());
 
@@ -266,8 +261,7 @@ impl WPRendererImpl for VideoWPRenderer2 {
                 vao,
                 vbo,
                 ebo,
-                decoder: None,
-                texture: None,
+                data: None,
             })
         }
     }
@@ -294,37 +288,42 @@ impl WPRendererImpl for VideoWPRenderer2 {
         }
 
         let ctx = self.render_context.as_mut().unwrap();
-        let decoder = ctx.decoder.as_mut().unwrap();
+        let data = ctx.data.as_mut().unwrap();
 
-        let (time, frame) = match decoder.decode() {
+        let (time, frame) = match data.decoder.decode() {
             Ok(o) => o,
             Err(err) => match err {
                 Error::ReadExhausted => {
-                    decoder.seek_to_start().unwrap();
-                    tracing::info!("Seeking to start");
-                    decoder.decode().expect("Error decoding frame")
+                    data.decoder
+                        .seek_to_start()
+                        .expect("Error during video frames decoding");
+                    data.decoder
+                        .decode()
+                        .expect("Error during video frames decoding")
                 }
-                _ => panic!("Error decoding frame"),
+                _ => panic!("Error during video frames decoding"),
             },
         };
-        
-        
 
         unsafe {
             gl::UseProgram(ctx.program);
             gl::BindVertexArray(ctx.vao);
             gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, ctx.ebo);
 
-            gl::BindTexture(gl::TEXTURE_2D, ctx.texture.unwrap());
+            gl::BindTexture(gl::TEXTURE_2D, data.texture);
+            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::REPEAT as GLint);
+            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::REPEAT as GLint);
+            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::NEAREST as GLint);
+            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::LINEAR as GLint);
 
-            let size = ctx.decoder.as_ref().unwrap().size_out();
+            let (width, height) = data.decoder.size_out();
             gl::TexSubImage2D(
                 gl::TEXTURE_2D,
                 0,
                 0,
                 0,
-                size.0 as GLsizei,
-                size.1 as GLsizei,
+                width as GLsizei,
+                height as GLsizei,
                 gl::RGB,
                 gl::UNSIGNED_BYTE,
                 frame.as_ptr() as *const c_void,
@@ -352,10 +351,10 @@ impl Drop for VideoWPRenderer2 {
     fn drop(&mut self) {
         if let Some(ctx) = self.render_context.as_mut() {
             unsafe {
-                if let Some(texture) = ctx.texture {
-                    gl::DeleteTextures(1, &texture);
+                if let Some(data) = &ctx.data {
+                    gl::DeleteTextures(1, &data.texture);
                 }
-                
+
                 gl::DeleteBuffers(1, &ctx.ebo);
                 gl::DeleteBuffers(1, &ctx.vbo);
                 gl::DeleteVertexArrays(1, &ctx.vao);
