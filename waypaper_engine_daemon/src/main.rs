@@ -16,6 +16,8 @@ mod wallpaper;
 mod wl_renderer;
 mod wallpaper_renderer;
 
+mod video_wp_renderer2;
+
 fn main() -> Result<(), Box<dyn Error>> {
     tracing_subscriber::fmt()
         .with_env_filter(

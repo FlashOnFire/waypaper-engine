@@ -6,7 +6,9 @@ use khronos_egl::{Context, Instance, Static};
 use libmpv2::Mpv;
 use libmpv2::render::{OpenGLInitParams, RenderContext, RenderParam, RenderParamApiType};
 use smithay_client_toolkit::reexports::client::Connection;
+
 use waypaper_engine_shared::project::WallpaperType;
+
 use crate::egl::EGLState;
 use crate::wallpaper::Wallpaper;
 use crate::wallpaper_renderer::WPRendererImpl;
@@ -55,7 +57,7 @@ impl VideoWPRenderer {
         }
     }
     
-    fn play_file(&self, file: &Path) {        
+    fn play_file(&self, file: &Path) {
         self.mpv.as_ref().unwrap()
             .command(
                 "loadfile",
@@ -112,7 +114,7 @@ impl WPRendererImpl for VideoWPRenderer {
             .as_ref()
             .unwrap()
             .render::<Context>(0, i32::try_from(width).unwrap(), height as i32, true)
-            .unwrap()
+            .unwrap();
     }
 
     fn get_wp_type(&self) -> WallpaperType {

@@ -30,6 +30,8 @@ impl AppState {
     }
 
     pub fn run(&mut self) -> Result<(), Box<dyn Error>> {
+        video_rs::init().unwrap();
+        
         let (tx, rx) = mpsc::channel::<IPCRequest>();
         let (stop_tx, stop_rx) = oneshot::channel::<()>();
 
@@ -52,11 +54,10 @@ impl AppState {
             }
         });
 
-        let mut i = 0;
         loop {
             match rx.try_recv() {
                 Ok(req) => match req {
-                    IPCRequest::SetWP { id, screen } => {
+                    IPCRequest::SetWP { id, screen } => {                        
                         let outputs = self.rendering_context.get_outputs();
                         if let Some(output) = outputs
                             .iter()
@@ -79,7 +80,6 @@ impl AppState {
                                         tracing::info!("Found video file ! (Path : {path:?})");
 
                                         self.rendering_context.set_wallpaper(output, wallpaper);
-                                        i += 1;
                                     }
                                 }
                             }
@@ -93,10 +93,6 @@ impl AppState {
             }
 
             self.rendering_context.tick();
-            
-            if i > 8 {
-                break;
-            }
         }
 
         stop_tx.send(()).unwrap();
