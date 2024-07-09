@@ -1,13 +1,15 @@
 use std::ffi::{c_void, CString};
-use std::path::{Path, PathBuf};
-use std::ptr;
+use std::path::PathBuf;
 use std::ptr::null;
 use std::rc::Rc;
 use std::str::from_utf8;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
+use std::{ptr, thread};
 
 use gl::types::{GLchar, GLenum, GLfloat, GLint, GLsizei, GLsizeiptr, GLuint};
 use smithay_client_toolkit::reexports::client::Connection;
-use video_rs::{Decoder, Error};
+use video_rs::{Decoder, Error, Frame};
 
 use waypaper_engine_shared::project::WallpaperType;
 
@@ -139,8 +141,9 @@ struct RenderContext {
 }
 
 struct RenderData {
-    decoder: Decoder,
+    frame: Arc<Mutex<Frame>>,
     texture: GLuint,
+    size: (u32, u32),
 }
 
 impl VideoWPRenderer2 {
@@ -154,15 +157,22 @@ impl VideoWPRenderer2 {
         }
     }
 
-    fn play_file(&mut self, file: &Path) {
+    fn start_playback(&mut self) {
         let source = video_rs::Location::File(self.video_path.as_ref().unwrap().clone());
         let decoder = Decoder::new(source).expect("Failed to create decoder");
+
+        /*let decoder = DecoderBuilder::new(source)
+        .with_hardware_acceleration(HardwareAccelerationDeviceType::VaApi)
+        .build()
+        .expect("Failed to create decoder");*/
         let size = decoder.size_out();
+
+        let frame = start_decoding_thread(decoder);
 
         let ctx = self.render_context.as_mut().unwrap();
 
         unsafe {
-            if let Some(data) = &ctx.data {
+            if let Some(data) = &ctx.data.take() {
                 gl::DeleteTextures(1, &data.texture);
             }
 
@@ -182,9 +192,52 @@ impl VideoWPRenderer2 {
                 null(),
             );
 
-            ctx.data = Some(RenderData { decoder, texture });
+            ctx.data = Some(RenderData {
+                frame,
+                texture,
+                size,
+            });
         }
     }
+}
+
+fn start_decoding_thread(mut decoder: Decoder) -> Arc<Mutex<Frame>> {
+    let mut start_time = Instant::now();
+    let duration = decoder.duration().unwrap().as_secs_f64();
+    let frame = Arc::new(Mutex::new(decoder.decode().unwrap().1)); // init with first frame
+
+    let weak = Arc::downgrade(&frame);
+
+    thread::spawn(move || 'outer: loop {
+        let result = match decoder.decode() {
+            Ok(o) => o,
+            Err(err) => match err {
+                Error::ReadExhausted => {
+                    decoder.seek_to_start().unwrap();
+                    start_time = Instant::now();
+                    decoder.decode().unwrap()
+                }
+                _ => panic!("Error while decoding video frames"),
+            },
+        };
+
+        let time = Instant::now().duration_since(start_time).as_secs_f64();
+        if time < duration {
+            let to_next_frame = result.0.as_secs_f64() - time;
+            if to_next_frame > 0.0 {
+                thread::sleep(Duration::from_millis((to_next_frame * 1000.0) as u64));
+            }
+        }
+
+        if let Some(strong) = weak.upgrade() {
+            let mut frame = strong.lock().unwrap();
+            *frame = result.1;
+        } else {
+            break 'outer;
+        }
+    });
+
+    frame
 }
 
 impl WPRendererImpl for VideoWPRenderer2 {
@@ -281,29 +334,16 @@ impl WPRendererImpl for VideoWPRenderer2 {
         }
     }
 
-    fn render(&mut self, width: u32, height: u32) {
+    fn render(&mut self, width: u32, height: u32) { // FIXME use width and height
         if !self.started_playback {
-            self.play_file(&self.video_path.as_ref().unwrap().clone());
+            self.start_playback();
             self.started_playback = true;
         }
 
         let ctx = self.render_context.as_mut().unwrap();
         let data = ctx.data.as_mut().unwrap();
 
-        let (time, frame) = match data.decoder.decode() {
-            Ok(o) => o,
-            Err(err) => match err {
-                Error::ReadExhausted => {
-                    data.decoder
-                        .seek_to_start()
-                        .expect("Error during video frames decoding");
-                    data.decoder
-                        .decode()
-                        .expect("Error during video frames decoding")
-                }
-                _ => panic!("Error during video frames decoding"),
-            },
-        };
+        let frame = data.frame.lock().unwrap();
 
         unsafe {
             gl::UseProgram(ctx.program);
@@ -316,7 +356,7 @@ impl WPRendererImpl for VideoWPRenderer2 {
             gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::NEAREST as GLint);
             gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::LINEAR as GLint);
 
-            let (width, height) = data.decoder.size_out();
+            let (width, height) = data.size;
             gl::TexSubImage2D(
                 gl::TEXTURE_2D,
                 0,
