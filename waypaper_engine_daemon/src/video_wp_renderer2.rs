@@ -2,18 +2,19 @@ use std::ffi::{c_void, CString};
 use std::path::PathBuf;
 use std::ptr::null;
 use std::rc::Rc;
-use std::str::from_utf8;
 use std::sync::{Arc, Mutex};
+use std::thread;
 use std::time::{Duration, Instant};
-use std::{ptr, thread};
 
-use gl::types::{GLchar, GLenum, GLfloat, GLint, GLsizei, GLsizeiptr, GLuint};
+use gl::types::{GLfloat, GLint, GLsizei, GLsizeiptr, GLuint};
 use smithay_client_toolkit::reexports::client::Connection;
-use video_rs::{Decoder, Error, Frame};
+use video_rs::{Decoder, DecoderBuilder, Error, Frame};
+use video_rs::hwaccel::HardwareAccelerationDeviceType;
 
 use waypaper_engine_shared::project::WallpaperType;
 
 use crate::egl::EGLState;
+use crate::gl_utils::{compile_shader, link_program};
 use crate::wallpaper::Wallpaper;
 use crate::wallpaper_renderer::WPRendererImpl;
 
@@ -65,66 +66,9 @@ const FRAGMENT_SHADER_SRC: &str = r#"
     }
 "#;
 
-fn compile_shader(src: &str, shader_type: GLenum) -> GLuint {
-    let mut shader = 0;
-    unsafe {
-        shader = gl::CreateShader(shader_type);
-
-        let c_str = CString::new(src.as_bytes()).unwrap();
-        gl::ShaderSource(shader, 1, &c_str.as_ptr(), ptr::null());
-        gl::CompileShader(shader);
-
-        let mut status = gl::FALSE as GLint;
-        gl::GetShaderiv(shader, gl::COMPILE_STATUS, &mut status);
-
-        if status != (gl::TRUE as GLint) {
-            let mut len = 0;
-            gl::GetShaderiv(shader, gl::INFO_LOG_LENGTH, &mut len);
-            let mut buf = Vec::with_capacity(len as usize);
-            gl::GetShaderInfoLog(
-                shader,
-                len,
-                ptr::null_mut(),
-                buf.as_mut_ptr() as *mut GLchar,
-            );
-            panic!("{}", from_utf8(&buf).expect("ShaderInfoLog not valid utf8"));
-        }
-    }
-    shader
-}
-
-fn link_program(vs: GLuint, fs: GLuint) -> GLuint {
-    unsafe {
-        let program = gl::CreateProgram();
-        gl::AttachShader(program, vs);
-        gl::AttachShader(program, fs);
-        gl::LinkProgram(program);
-
-        let mut status = gl::FALSE as GLint;
-        gl::GetProgramiv(program, gl::LINK_STATUS, &mut status);
-
-        if status != (gl::TRUE as GLint) {
-            let mut len: GLint = 0;
-            gl::GetProgramiv(program, gl::INFO_LOG_LENGTH, &mut len);
-            let mut buf = Vec::with_capacity(len as usize);
-            gl::GetProgramInfoLog(
-                program,
-                len,
-                ptr::null_mut(),
-                buf.as_mut_ptr() as *mut GLchar,
-            );
-            panic!(
-                "{}",
-                from_utf8(&buf).expect("ProgramInfoLog not valid utf8")
-            );
-        }
-        program
-    }
-}
-
 pub struct VideoWPRenderer2 {
-    connection: Rc<Connection>,
-    egl_state: Rc<EGLState>,
+    _connection: Rc<Connection>,
+    _egl_state: Rc<EGLState>,
 
     render_context: Option<RenderContext>,
 
@@ -149,8 +93,8 @@ struct RenderData {
 impl VideoWPRenderer2 {
     pub(crate) fn new(connection: Rc<Connection>, egl_state: Rc<EGLState>) -> Self {
         Self {
-            connection,
-            egl_state,
+            _connection: connection,
+            _egl_state: egl_state,
             render_context: None,
             video_path: None,
             started_playback: false,
@@ -159,12 +103,12 @@ impl VideoWPRenderer2 {
 
     fn start_playback(&mut self) {
         let source = video_rs::Location::File(self.video_path.as_ref().unwrap().clone());
-        let decoder = Decoder::new(source).expect("Failed to create decoder");
+        //let decoder = Decoder::new(source).expect("Failed to create decoder");
 
-        /*let decoder = DecoderBuilder::new(source)
-        .with_hardware_acceleration(HardwareAccelerationDeviceType::VaApi)
-        .build()
-        .expect("Failed to create decoder");*/
+        let decoder = DecoderBuilder::new(source)
+            .with_hardware_acceleration(HardwareAccelerationDeviceType::VaApi)
+            .build()
+            .expect("Failed to create decoder");
         let size = decoder.size_out();
 
         let frame = start_decoding_thread(decoder);
@@ -334,7 +278,8 @@ impl WPRendererImpl for VideoWPRenderer2 {
         }
     }
 
-    fn render(&mut self, width: u32, height: u32) { // FIXME use width and height
+    fn render(&mut self, width: u32, height: u32) {
+        // FIXME use width and height
         if !self.started_playback {
             self.start_playback();
             self.started_playback = true;
