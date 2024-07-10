@@ -20,6 +20,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     let grid = document.querySelector(".wp-grid");
     let screen_selector = document.querySelector(".screen-selector");
     let search_input = document.querySelector(".search-input");
+    let stop_daemon_btn = document.querySelector(".stop-daemon-btn");
 
     let screens = await invoke("get_screens", {});
     console.dir(screens);
@@ -51,6 +52,10 @@ window.addEventListener("DOMContentLoaded", async () => {
 
     search_input.addEventListener("input", async (event) => {
         await invoke("apply_filter", {search: event.target.value});
+    });
+    
+    stop_daemon_btn.addEventListener("click", async (event) => {
+        await invoke("stop_daemon", {});
     });
 
     await invoke("loaded", {});

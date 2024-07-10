@@ -16,6 +16,15 @@ use waypaper_engine_shared::ipc::IPCRequest;
 use waypaper_engine_shared::project::{WallpaperType, WEProject};
 
 #[tauri::command]
+fn stop_daemon(channel: State<Mutex<IpcChannel>>) {
+    channel
+        .lock()
+        .unwrap()
+        .send::<_, IPCRequest>(IPCRequest::StopDaemon)
+        .expect("Failed to communicate with daemon");
+}
+
+#[tauri::command]
 fn get_screens(xrandr: State<Mutex<Parser>>) -> Vec<String> {
     let mut xrandr = xrandr.lock().unwrap();
     xrandr.parse().unwrap();
@@ -28,7 +37,7 @@ fn set_wp(wp_id: u64, screen: String, channel: State<Mutex<IpcChannel>>) {
         .lock()
         .unwrap()
         .send::<_, IPCRequest>(IPCRequest::SetWP { id: wp_id, screen })
-        .expect("Failed to send message");
+        .expect("Failed to communicate with daemon");
 
     if let Some(response) = response {
         println!("Received: {:#?}", response);
@@ -113,7 +122,8 @@ fn main() -> Result<(), Box<dyn Error>> {
             loaded,
             get_screens,
             set_wp,
-            apply_filter
+            apply_filter,
+            stop_daemon,
         ])
         .manage(wallpapers)
         .manage(wallpaper_infos)

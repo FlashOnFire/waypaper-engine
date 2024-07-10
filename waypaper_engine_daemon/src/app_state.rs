@@ -33,7 +33,6 @@ impl AppState {
         video_rs::init().unwrap();
         
         let (tx, rx) = mpsc::channel::<IPCRequest>();
-        let (stop_tx, stop_rx) = oneshot::channel::<()>();
 
         let ipc_thread = thread::spawn(move || {
             let mut channel = IpcChannel::new("/tmp/waypaper-engine.sock").unwrap();
@@ -43,18 +42,17 @@ impl AppState {
                 match channel.receive::<IPCRequest, String>() {
                     Ok((response, reply)) => {
                         tracing::debug!("Received msg : [{:?}]", response);
-                        tx.send(response).unwrap();
+                        tx.send(response.clone()).unwrap();
+                        if let IPCRequest::StopDaemon = response { break }
                     }
                     Err(err) => tracing::warn!("IPC Received invalid data (Error: {})", err),
-                }
-
-                if stop_rx.try_recv().is_ok() {
-                    break;
                 }
             }
         });
 
         loop {
+            self.rendering_context.tick();
+            
             match rx.try_recv() {
                 Ok(req) => match req {
                     IPCRequest::SetWP { id, screen } => {                        
@@ -85,6 +83,9 @@ impl AppState {
                             }
                         }
                     }
+                    IPCRequest::StopDaemon => {
+                        break;
+                    }
                 },
                 Err(err) => match err {
                     TryRecvError::Empty => {}
@@ -92,10 +93,8 @@ impl AppState {
                 },
             }
 
-            self.rendering_context.tick();
         }
 
-        stop_tx.send(()).unwrap();
         ipc_thread.join().unwrap();
 
         Ok(())
