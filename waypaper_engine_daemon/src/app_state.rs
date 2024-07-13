@@ -31,7 +31,7 @@ impl AppState {
 
     pub fn run(&mut self) -> Result<(), Box<dyn Error>> {
         video_rs::init().unwrap();
-        
+
         let (tx, rx) = mpsc::channel::<IPCRequest>();
 
         let ipc_thread = thread::spawn(move || {
@@ -43,7 +43,9 @@ impl AppState {
                     Ok((response, reply)) => {
                         tracing::debug!("Received msg : [{:?}]", response);
                         tx.send(response.clone()).unwrap();
-                        if let IPCRequest::StopDaemon = response { break }
+                        if let IPCRequest::StopDaemon = response {
+                            break;
+                        }
                     }
                     Err(err) => tracing::warn!("IPC Received invalid data (Error: {})", err),
                 }
@@ -52,21 +54,18 @@ impl AppState {
 
         loop {
             self.rendering_context.tick();
-            
+
             match rx.try_recv() {
                 Ok(req) => match req {
-                    IPCRequest::SetWP { id, screen } => {                        
+                    IPCRequest::SetWP { id, screen } => {
                         let outputs = self.rendering_context.get_outputs();
                         if let Some(output) = outputs
                             .iter()
                             .find(|output| output.1.name.as_ref().unwrap() == &screen)
-                        {                          
+                        {
                             let path = self.wpe_dir.join(id.to_string());
                             if path.exists() && path.is_dir() {
-                                let wallpaper = Wallpaper::new(
-                                    path,
-                                )
-                                .unwrap();
+                                let wallpaper = Wallpaper::new(path).unwrap();
 
                                 if let Wallpaper::Video { ref project, .. } = wallpaper {
                                     let path = self
@@ -81,6 +80,8 @@ impl AppState {
                                     }
                                 }
                             }
+                        } else {
+                            tracing::warn!("Received wrong output in SetWallpaper request: [{}]", screen);
                         }
                     }
                     IPCRequest::StopDaemon => {
@@ -92,7 +93,6 @@ impl AppState {
                     TryRecvError::Disconnected => panic!(),
                 },
             }
-
         }
 
         ipc_thread.join().unwrap();

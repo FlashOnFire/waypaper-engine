@@ -45,7 +45,8 @@ window.addEventListener("DOMContentLoaded", async () => {
 
         for (const id of ids) {
             document.getElementById(id).addEventListener("click", async (/*mouse_event*/) => {
-                await invoke("set_wp", {wpId: id, screen: screen_selector.textContent})
+                console.dir(screen_selector);
+                await invoke("set_wp", {wpId: id, screen: screen_selector.value})
             });
         }
     });
