@@ -8,8 +8,8 @@ use std::time::{Duration, Instant};
 
 use gl::types::{GLfloat, GLint, GLsizei, GLsizeiptr, GLuint};
 use smithay_client_toolkit::reexports::client::Connection;
-use video_rs::{Decoder, DecoderBuilder, Error, Frame};
 use video_rs::hwaccel::HardwareAccelerationDeviceType;
+use video_rs::{Decoder, DecoderBuilder, Error, Frame};
 
 use waypaper_engine_shared::project::WallpaperType;
 
@@ -207,7 +207,8 @@ impl WPRendererImpl for VideoWPRenderer2 {
 
             let program = link_program(vertex_shader, fragment_shader);
 
-            gl::BindFragDataLocation(program, 0, CString::new("out_color").unwrap().as_ptr());
+            let pointer = CString::new("out_color").unwrap();
+            gl::BindFragDataLocation(program, 0, pointer.as_ptr());
 
             gl::DeleteShader(vertex_shader);
             gl::DeleteShader(fragment_shader);
@@ -314,12 +315,7 @@ impl WPRendererImpl for VideoWPRenderer2 {
                 frame.as_ptr() as *const c_void,
             );
 
-            gl::DrawElements(
-                gl::TRIANGLES,
-                6,
-                gl::UNSIGNED_INT,
-                std::ptr::null::<c_void>(),
-            );
+            gl::DrawElements(gl::TRIANGLES, 6, gl::UNSIGNED_INT, null::<c_void>());
 
             gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, 0);
             gl::UseProgram(0);
