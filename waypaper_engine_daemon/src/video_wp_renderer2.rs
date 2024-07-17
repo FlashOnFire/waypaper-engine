@@ -8,8 +8,8 @@ use std::time::{Duration, Instant};
 
 use gl::types::{GLfloat, GLint, GLsizei, GLsizeiptr, GLuint};
 use smithay_client_toolkit::reexports::client::Connection;
-use video_rs::hwaccel::HardwareAccelerationDeviceType;
 use video_rs::{Decoder, DecoderBuilder, Error, Frame};
+use video_rs::hwaccel::HardwareAccelerationDeviceType;
 
 use waypaper_engine_shared::project::WallpaperType;
 
@@ -280,7 +280,6 @@ impl WPRendererImpl for VideoWPRenderer2 {
     }
 
     fn render(&mut self, width: u32, height: u32) {
-        // FIXME use width and height
         if !self.started_playback {
             self.start_playback();
             self.started_playback = true;
@@ -292,8 +291,11 @@ impl WPRendererImpl for VideoWPRenderer2 {
         let frame = data.frame.lock().unwrap();
 
         unsafe {
-            gl::UseProgram(ctx.program);
+            // Reset viewport each frame to avoid problems when rendering on two screens with different resolutions
+            gl::Viewport(0, 0, width as GLsizei, height as GLsizei);
+
             gl::BindVertexArray(ctx.vao);
+            gl::UseProgram(ctx.program);
             gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, ctx.ebo);
 
             gl::BindTexture(gl::TEXTURE_2D, data.texture);
@@ -302,14 +304,14 @@ impl WPRendererImpl for VideoWPRenderer2 {
             gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::NEAREST as GLint);
             gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::LINEAR as GLint);
 
-            let (width, height) = data.size;
+            let (tex_width, tex_height) = data.size;
             gl::TexSubImage2D(
                 gl::TEXTURE_2D,
                 0,
                 0,
                 0,
-                width as GLsizei,
-                height as GLsizei,
+                tex_width as GLsizei,
+                tex_height as GLsizei,
                 gl::RGB,
                 gl::UNSIGNED_BYTE,
                 frame.as_ptr() as *const c_void,
