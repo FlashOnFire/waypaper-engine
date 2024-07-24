@@ -5,8 +5,9 @@ use smithay_client_toolkit::reexports::client::Connection;
 use waypaper_engine_shared::project::WallpaperType;
 
 use crate::egl::EGLState;
-use crate::video_wp_renderer2::VideoWPRenderer2;
-use crate::video_wp_renderer::VideoWPRenderer;
+use crate::gstreamer_video_wp_renderer::GStreamerVideoWPRenderer;
+use crate::videors_video_wp_renderer::VideoRSVideoWPRenderer;
+use crate::mpv_video_wp_renderer::MpvVideoWPRenderer;
 use crate::wallpaper::Wallpaper;
 
 pub struct WPRenderer {
@@ -32,7 +33,7 @@ impl WPRenderer {
         {
             match wallpaper {
                 Wallpaper::Video { .. } => {
-                    self.renderer = Some(Box::new(VideoWPRenderer2::new(
+                    self.renderer = Some(Box::new(VideoRSVideoWPRenderer::new(
                         self.connection.clone(),
                         self.egl_state.clone(),
                     )));

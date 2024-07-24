@@ -24,7 +24,11 @@ smithay-client-toolkit = "0.18.1"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 wayland-egl = "0.32.0"
-
 video-rs = { version = "0.8.1", features = ["ndarray"] }
+gstreamer = "0.23.0"
+gstreamer-base = "0.23.0"
+gstreamer-gl = { version = "0.23.0" , features = ["v1_20"]}
+gstreamer-gl-wayland = "0.23.0"
+gstreamer-gl-egl = "0.23.0"
 
 waypaper_engine_shared = {path = "../waypaper_engine_shared"}

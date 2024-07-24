@@ -8,8 +8,7 @@ use std::time::{Duration, Instant};
 
 use gl::types::{GLfloat, GLint, GLsizei, GLsizeiptr, GLuint};
 use smithay_client_toolkit::reexports::client::Connection;
-use video_rs::{Decoder, DecoderBuilder, Error, Frame};
-use video_rs::hwaccel::HardwareAccelerationDeviceType;
+use video_rs::{Decoder, DecoderBuilder, Error, Frame, Options};
 
 use waypaper_engine_shared::project::WallpaperType;
 
@@ -66,7 +65,7 @@ const FRAGMENT_SHADER_SRC: &str = r#"
     }
 "#;
 
-pub struct VideoWPRenderer2 {
+pub struct VideoRSVideoWPRenderer {
     _connection: Rc<Connection>,
     _egl_state: Rc<EGLState>,
 
@@ -90,7 +89,7 @@ struct RenderData {
     size: (u32, u32),
 }
 
-impl VideoWPRenderer2 {
+impl VideoRSVideoWPRenderer {
     pub(crate) fn new(connection: Rc<Connection>, egl_state: Rc<EGLState>) -> Self {
         Self {
             _connection: connection,
@@ -106,7 +105,8 @@ impl VideoWPRenderer2 {
         //let decoder = Decoder::new(source).expect("Failed to create decoder");
 
         let decoder = DecoderBuilder::new(source)
-            .with_hardware_acceleration(HardwareAccelerationDeviceType::VaApi)
+            //.with_hardware_acceleration(HardwareAccelerationDeviceType::VaApi)
+            .with_options(&Options::preset_h264())
             .build()
             .expect("Failed to create decoder");
         let size = decoder.size_out();
@@ -116,6 +116,7 @@ impl VideoWPRenderer2 {
         let ctx = self.render_context.as_mut().unwrap();
 
         unsafe {
+            gl::BindTexture(gl::TEXTURE_2D, 0);
             if let Some(data) = &ctx.data.take() {
                 gl::DeleteTextures(1, &data.texture);
             }
@@ -152,39 +153,43 @@ fn start_decoding_thread(mut decoder: Decoder) -> Arc<Mutex<Frame>> {
 
     let weak = Arc::downgrade(&frame);
 
-    thread::spawn(move || 'outer: loop {
-        let result = match decoder.decode() {
-            Ok(o) => o,
-            Err(err) => match err {
-                Error::ReadExhausted => {
-                    decoder.seek_to_start().unwrap();
-                    start_time = Instant::now();
-                    decoder.decode().unwrap()
-                }
-                _ => panic!("Error while decoding video frames"),
-            },
-        };
+    thread::spawn(move || {
+        'outer: loop {
+            let result = match decoder.decode() {
+                Ok(o) => o,
+                Err(err) => match err {
+                    Error::ReadExhausted => {
+                        decoder.seek_to_start().unwrap();
+                        start_time = Instant::now();
+                        decoder.decode().unwrap()
+                    }
+                    _ => panic!("Error while decoding video frames"),
+                },
+            };
 
-        let time = Instant::now().duration_since(start_time).as_secs_f64();
-        if time < duration {
-            let to_next_frame = result.0.as_secs_f64() - time;
-            if to_next_frame > 0.0 {
-                thread::sleep(Duration::from_millis((to_next_frame * 1000.0) as u64));
+            let time = Instant::now().duration_since(start_time).as_secs_f64();
+            if time < duration {
+                let to_next_frame = result.0.as_secs_f64() - time;
+                if to_next_frame > 0.0 {
+                    thread::sleep(Duration::from_millis((to_next_frame * 1000.0) as u64));
+                }
+            }
+
+            if let Some(strong) = weak.upgrade() {
+                let mut frame = strong.lock().unwrap();
+                *frame = result.1;
+            } else {
+                break 'outer;
             }
         }
 
-        if let Some(strong) = weak.upgrade() {
-            let mut frame = strong.lock().unwrap();
-            *frame = result.1;
-        } else {
-            break 'outer;
-        }
+        tracing::info!("Exited Decoding Thread");
     });
 
     frame
 }
 
-impl WPRendererImpl for VideoWPRenderer2 {
+impl WPRendererImpl for VideoRSVideoWPRenderer {
     fn init_render(&mut self) {
         unsafe {
             let mut vao: GLuint = 0;
@@ -272,10 +277,8 @@ impl WPRendererImpl for VideoWPRenderer2 {
             } => {
                 self.video_path = Some(base_dir_path.join(project.file.as_ref().unwrap()));
                 self.started_playback = false;
-            }
-            Wallpaper::Scene { .. } => {}
-            Wallpaper::Web { .. } => {}
-            Wallpaper::Preset { .. } => {}
+            },
+            _ => unreachable!()
         }
     }
 
@@ -330,7 +333,7 @@ impl WPRendererImpl for VideoWPRenderer2 {
     }
 }
 
-impl Drop for VideoWPRenderer2 {
+impl Drop for VideoRSVideoWPRenderer {
     fn drop(&mut self) {
         if let Some(ctx) = self.render_context.as_mut() {
             unsafe {
@@ -343,6 +346,7 @@ impl Drop for VideoWPRenderer2 {
                 gl::DeleteVertexArrays(1, &ctx.vao);
                 gl::DeleteProgram(ctx.program);
             }
+            println!("memory freed");
         }
     }
 }

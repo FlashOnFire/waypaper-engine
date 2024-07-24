@@ -1,9 +1,22 @@
 use std::error::Error;
+use std::ffi::{c_char, c_int, CString};
 use std::path::PathBuf;
+use std::ptr::{null, null_mut};
 use std::sync::mpsc;
 use std::sync::mpsc::TryRecvError;
 use std::thread;
 
+use gstreamer::ffi::{
+    gst_bin_add, gst_bin_add_many, gst_element_factory_make, gst_element_link,
+    gst_element_link_many, gst_element_set_state, gst_init, gst_is_initialized, gst_pipeline_new,
+    GstBin, GstElement, GST_STATE_PLAYING,
+};
+use gstreamer::glib::ffi::GFALSE;
+use gstreamer::glib::gobject_ffi::{g_object_set, GObject, GValue};
+use gstreamer_gl::ffi::{
+    gst_gl_context_new, gst_gl_display_new_with_type, GST_GL_DISPLAY_TYPE_WAYLAND,
+};
+use gstreamer_gl::gst_video::ffi::{gst_video_overlay_set_render_rectangle, GstVideoOverlay};
 use linux_ipc::IpcChannel;
 
 use waypaper_engine_shared::ipc::IPCRequest;
@@ -81,7 +94,10 @@ impl AppState {
                                 }
                             }
                         } else {
-                            tracing::warn!("Received wrong output in SetWallpaper request: [{}]", screen);
+                            tracing::warn!(
+                                "Received wrong output in SetWallpaper request: [{}]",
+                                screen
+                            );
                         }
                     }
                     IPCRequest::StopDaemon => {
