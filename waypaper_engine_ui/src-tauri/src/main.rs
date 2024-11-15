@@ -9,7 +9,7 @@ use std::sync::Mutex;
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use linux_ipc::IpcChannel;
 use serde::Serialize;
-use tauri::{Manager, State, Window};
+use tauri::{Emitter, State, Window};
 use xrandr_parser::Parser;
 
 use waypaper_engine_shared::ipc::IPCRequest;

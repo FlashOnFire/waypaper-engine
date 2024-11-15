@@ -5,6 +5,13 @@ use std::rc::Rc;
 use fps_counter::FPSCounter;
 use gl::COLOR_BUFFER_BIT;
 use khronos_egl::ATTRIB_NONE;
+use smithay_client_toolkit::output::OutputInfo;
+use smithay_client_toolkit::reexports::client::globals::{registry_queue_init, GlobalList};
+use smithay_client_toolkit::reexports::client::protocol::wl_output::WlOutput;
+use smithay_client_toolkit::reexports::client::protocol::wl_surface::WlSurface;
+use smithay_client_toolkit::reexports::client::protocol::{wl_output, wl_seat, wl_surface};
+use smithay_client_toolkit::reexports::client::{Connection, EventQueue, Proxy, QueueHandle};
+use smithay_client_toolkit::shell::wlr_layer::Anchor;
 use smithay_client_toolkit::{
     compositor::{CompositorHandler, CompositorState},
     delegate_compositor, delegate_layer, delegate_output, delegate_registry, delegate_seat,
@@ -13,19 +20,13 @@ use smithay_client_toolkit::{
     registry_handlers,
     seat::{Capability, SeatHandler, SeatState},
     shell::{
-        WaylandSurface,
         wlr_layer::{
             KeyboardInteractivity, Layer, LayerShell, LayerShellHandler, LayerSurface,
             LayerSurfaceConfigure,
         },
+        WaylandSurface,
     },
 };
-use smithay_client_toolkit::output::OutputInfo;
-use smithay_client_toolkit::reexports::client::{Connection, EventQueue, Proxy, QueueHandle};
-use smithay_client_toolkit::reexports::client::globals::{GlobalList, registry_queue_init};
-use smithay_client_toolkit::reexports::client::protocol::{wl_output, wl_seat, wl_surface};
-use smithay_client_toolkit::reexports::client::protocol::wl_output::WlOutput;
-use smithay_client_toolkit::shell::wlr_layer::Anchor;
 use wayland_egl::WlEglSurface;
 
 use crate::egl::EGLState;
@@ -90,11 +91,7 @@ impl RenderingContext {
         )
     }
 
-    pub(crate) fn set_wallpaper(
-        &mut self,
-        output: (&WlOutput, &OutputInfo),
-        wallpaper: Wallpaper,
-    ) {
+    pub(crate) fn set_wallpaper(&mut self, output: (&WlOutput, &OutputInfo), wallpaper: Wallpaper) {
         let output_name = output.1.name.clone().unwrap();
 
         let layer = if self.wl_state.layers.contains_key(&output_name.clone()) {
@@ -102,7 +99,7 @@ impl RenderingContext {
         } else {
             self.wl_state.setup_layer(output)
         };
-        
+
         layer.set_wallpaper(wallpaper);
     }
 }
@@ -201,9 +198,12 @@ impl WLState {
             fps_counter: FPSCounter::new(),
             wallpaper: None,
         };
-        
-        self.layers.insert(output.1.name.as_ref().unwrap().clone(), layer);
-        self.layers.get_mut(output.1.name.as_ref().unwrap()).unwrap()
+
+        self.layers
+            .insert(output.1.name.as_ref().unwrap().clone(), layer);
+        self.layers
+            .get_mut(output.1.name.as_ref().unwrap())
+            .unwrap()
     }
 }
 
@@ -305,6 +305,24 @@ impl CompositorHandler for WLState {
         {
             layer.draw(qh);
         }
+    }
+
+    fn surface_enter(
+        &mut self,
+        conn: &Connection,
+        qh: &QueueHandle<Self>,
+        surface: &WlSurface,
+        output: &WlOutput,
+    ) {
+    }
+
+    fn surface_leave(
+        &mut self,
+        conn: &Connection,
+        qh: &QueueHandle<Self>,
+        surface: &WlSurface,
+        output: &WlOutput,
+    ) {
     }
 }
 
@@ -430,7 +448,7 @@ impl SimpleLayer {
         self.renderer.init_render();
         self.egl_state.detach_context();
     }
-    
+
     pub fn draw(&mut self, qh: &QueueHandle<WLState>) {
         let width = self.width;
         let height = self.height;

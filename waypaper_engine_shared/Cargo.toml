@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-serde = { version = "1.0.203", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
 cgmath = "0.18.0"
 serde-this-or-that = "0.4.2"
-serde_json = "1.0.120"
+serde_json = "1"

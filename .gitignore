@@ -13,3 +13,5 @@ waypaper-engine-ui/*.local
 waypaper_engine_ui/src-tauri/gen/schemas
 
 tests
+test
+waypaper_engine_daemon/test
