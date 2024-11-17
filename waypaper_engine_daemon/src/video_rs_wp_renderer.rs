@@ -1,9 +1,11 @@
+use std::collections::VecDeque;
 use std::ffi::{c_void, CString};
 use std::path::PathBuf;
 use std::ptr::null;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use std::thread;
+use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
 use gl::types::{GLfloat, GLint, GLsizei, GLsizeiptr, GLuint};
@@ -85,9 +87,13 @@ struct RenderContext {
 }
 
 struct RenderData {
-    frame: Arc<Mutex<Frame>>,
+    decoding_thread_handle: JoinHandle<()>,
+    frames: Arc<Mutex<VecDeque<Frame>>>,
     texture: GLuint,
     size: (u32, u32),
+    framerate: f32,
+    last_frame_time: Instant,
+    last_frame: Frame,
 }
 
 impl VideoRSWPRenderer {
@@ -110,13 +116,14 @@ impl VideoRSWPRenderer {
             .build()
             .expect("Failed to create decoder");
         let size = decoder.size_out();
+        let framerate = decoder.frame_rate();
 
-        let frame = start_decoding_thread(decoder);
+        let (thread_handle, frames_vec) = start_decoding_thread(decoder);
 
         let ctx = self.render_context.as_mut().unwrap();
 
         unsafe {
-            if let Some(data) = &ctx.data.take() {
+            if let Some(data) = ctx.data.take() {
                 gl::DeleteTextures(1, &data.texture);
             }
 
@@ -137,54 +144,59 @@ impl VideoRSWPRenderer {
             );
 
             ctx.data = Some(RenderData {
-                frame,
+                decoding_thread_handle: thread_handle,
+                frames: frames_vec.clone(),
                 texture,
                 size,
+                framerate,
+                last_frame_time: Instant::now(),
+                last_frame: frames_vec.lock().unwrap().front().unwrap().clone(),
             });
         }
     }
 }
 
-fn start_decoding_thread(mut decoder: Decoder) -> Arc<Mutex<Frame>> {
-    let mut start_time = Instant::now();
-    let duration = decoder.duration().unwrap().as_secs_f64();
-    let frame = Arc::new(Mutex::new(decoder.decode().unwrap().1)); // init with first frame
+fn start_decoding_thread(mut decoder: Decoder) -> (JoinHandle<()>, Arc<Mutex<VecDeque<Frame>>>) {
+    let mut frames_vec = VecDeque::with_capacity(5);
+    frames_vec.push_back(decoder.decode().unwrap().1);
+    let frames_arc = Arc::new(Mutex::new(frames_vec)); // init with first frame
 
-    let weak = Arc::downgrade(&frame);
-
-    thread::spawn(move || {
+    let weak = Arc::downgrade(&frames_arc);
+    
+    let handle = thread::spawn(move || {
+        tracing::debug!("Spawn decoding thread");
         'outer: loop {
-            let result = match decoder.decode() {
-                Ok(o) => o,
+            let frame = match decoder.decode() {
+                Ok(o) => o.1,
                 Err(err) => match err {
                     Error::ReadExhausted => {
                         decoder.seek_to_start().unwrap();
-                        start_time = Instant::now();
-                        decoder.decode().unwrap()
+                        decoder.decode().unwrap().1
                     }
                     _ => panic!("Error while decoding video frames"),
                 },
             };
 
-            let time = Instant::now().duration_since(start_time).as_secs_f64();
-            if time < duration {
-                let to_next_frame = result.0.as_secs_f64() - time;
-                if to_next_frame > 0.0 {
-                    thread::sleep(Duration::from_millis((to_next_frame * 1000.0) as u64));
-                }
+            while let Some(strong) = weak.upgrade()
+                && strong.lock().unwrap().len() >= 20
+            {
+                tracing::debug!("Frames in queue >= 20, paused decoding");
+                thread::park();
+                tracing::debug!("Resumed decoding")
             }
 
             if let Some(strong) = weak.upgrade() {
-                let mut frame = strong.lock().unwrap();
-                *frame = result.1;
+                let mut frames_vec = strong.lock().unwrap();
+                assert!(frames_vec.len() < 20);
+                frames_vec.push_back(frame);
             } else {
                 break 'outer;
             }
         }
-        println!("Exited Decoding Thread!");
+        tracing::debug!("Exited decoding Thread!");
     });
 
-    frame
+    (handle, frames_arc)
 }
 
 impl WPRendererImpl for VideoRSWPRenderer {
@@ -268,6 +280,8 @@ impl WPRendererImpl for VideoRSWPRenderer {
     }
 
     fn setup_wallpaper(&mut self, wp: &Wallpaper) {
+        tracing::debug!("Setup video_rs wp");
+
         match wp {
             Wallpaper::Video {
                 ref project,
@@ -288,8 +302,26 @@ impl WPRendererImpl for VideoRSWPRenderer {
 
         let ctx = self.render_context.as_mut().unwrap();
         let data = ctx.data.as_mut().unwrap();
+        
+        let frame = if Instant::now().duration_since(data.last_frame_time).as_secs_f32() < 1.0 / data.framerate {
+            tracing::debug!("Not enough time since last frame, rendering last frame again");
+            &data.last_frame
+        } else {
+            data.last_frame_time = Instant::now();
 
-        let frame = data.frame.lock().unwrap();
+            let mut frames = data.frames.lock().unwrap();
+            match frames.pop_front() {
+                Some(frame) => {
+                    data.decoding_thread_handle.thread().unpark();
+                    data.last_frame = frame;
+                    &data.last_frame
+                },
+                None => {
+                    tracing::debug!("No frame to render in queue! Rendering last frame");
+                    &data.last_frame
+                }
+            }
+        };
 
         unsafe {
             // Reset viewport each frame to avoid problems when rendering on two screens with different resolutions
