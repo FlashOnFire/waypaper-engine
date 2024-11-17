@@ -17,7 +17,7 @@ fn get_proc_address(egl: &Rc<Instance<Static>>, name: &str) -> *mut c_void {
     egl.get_proc_address(name).unwrap() as *mut c_void
 }
 
-pub struct VideoWPRenderer {
+pub struct MPVVideoWPRenderer {
     connection: Rc<Connection>,
     egl_state: Rc<EGLState>,
     
@@ -28,7 +28,7 @@ pub struct VideoWPRenderer {
     started_playback: bool,
 }
 
-impl VideoWPRenderer {
+impl MPVVideoWPRenderer {
     pub(crate) fn new(connection: Rc<Connection>, egl_state: Rc<EGLState>) -> Self {
         let mpv = Mpv::new().expect("Error while creating mpv");
 
@@ -70,7 +70,7 @@ impl VideoWPRenderer {
     }
 }
 
-impl WPRendererImpl for VideoWPRenderer {
+impl WPRendererImpl for MPVVideoWPRenderer {
     fn init_render(&mut self) {
         unsafe {
             self.render_context = Some(
