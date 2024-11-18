@@ -25,6 +25,6 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 wayland-egl = "0.32.4"
 
-video-rs = { version = "0.10.1", features = ["ndarray"] }
+video-rs = { version = "0.10.2", features = ["ndarray"] }
 
 waypaper_engine_shared = {path = "../waypaper_engine_shared"}

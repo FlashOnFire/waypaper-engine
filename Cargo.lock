@@ -4853,9 +4853,9 @@ checksum = "49874b5167b65d7193b8aba1567f5c7d93d001cafc34600cee003eda787e483f"
 
 [[package]]
 name = "video-rs"
-version = "0.10.1"
+version = "0.10.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "605f0869aa5eea25c9e51f9571e4b5ca26bca113b56ca6964889577a2a3e00e7"
+checksum = "b57d47e91d938bcd79bfe9bcb579e6a27d7fcba2c63d11f88f0eef61deb53424"
 dependencies = [
  "ffmpeg-next",
  "ndarray",
