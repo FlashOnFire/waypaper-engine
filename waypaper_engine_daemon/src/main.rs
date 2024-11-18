@@ -13,7 +13,6 @@ mod file_reading_utils;
 mod scene;
 mod scene_package;
 mod tex_file;
-mod mpv_video_wp_renderer;
 mod wallpaper;
 mod wallpaper_renderer;
 mod wl_renderer;

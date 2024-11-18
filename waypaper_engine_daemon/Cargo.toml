@@ -11,7 +11,6 @@ fps_counter = "3.0.0"
 gl = "0.14.0"
 image = "0.25.5"
 khronos-egl = { version = "6.0.0", features = ["static"] }
-libmpv2 = "4.1.0"
 linux-ipc = "0.2.1"
 lz4_flex = "0.11.3"
 num_enum = "0.7.2"

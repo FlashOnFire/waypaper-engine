@@ -2116,21 +2116,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "libmpv2"
-version = "4.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3e0c3802b4bb1a18adbf5659b078ce24cb8e16c79ff695557f4e10af2a44722a"
-dependencies = [
- "libmpv2-sys",
-]
-
-[[package]]
-name = "libmpv2-sys"
-version = "4.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "42124ba90561beede41d5e6ef64eef63fc1395cf83217e3dd1157294f7dcdb56"
-
-[[package]]
 name = "libredox"
 version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5108,7 +5093,6 @@ dependencies = [
  "gl",
  "image",
  "khronos-egl",
- "libmpv2",
  "linux-ipc",
  "lz4_flex",
  "num_enum",
