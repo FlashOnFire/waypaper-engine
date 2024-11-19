@@ -1,3 +1,5 @@
+#![feature(let_chains)]
+
 use std::error::Error;
 
 use tracing::level_filters::LevelFilter;
