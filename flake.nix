@@ -48,7 +48,7 @@
       in {
         packages = {
           default = self'.packages.waypaper-engine;
-          waypaper-engine = pkgs.callPackage ./waypaper-engine {
+          waypaper-engine = pkgs.callPackage ./packaging/nix {
             inherit rustVersion buildInputs nativeBuildInputs;
           };
         };
