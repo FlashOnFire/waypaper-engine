@@ -1,18 +1,13 @@
 {
   lib,
-  # rustPlatform,
-  makeRustPlatform,
-  rust-bin,
-  pkg-config,
-  wayland,
-  libGL,
-  libxkbcommon,
-  mpv,
-  webkitgtk_4_1,
+  pkgs,
+  rustVersion,
+  buildInputs,
+  nativeBuildInputs,
 }: let
-  rustPlatform = makeRustPlatform {
-    cargo = rust-bin.stable.latest.default;
-    rustc = rust-bin.stable.latest.default;
+  rustPlatform = pkgs.makeRustPlatform {
+    cargo = rustVersion;
+    rustc = rustVersion;
   };
 in
   rustPlatform.buildRustPackage {
@@ -22,14 +17,5 @@ in
 
     cargoLock.lockFile = ../../Cargo.lock;
 
-    buildInputs = [
-      wayland
-      libGL
-      libxkbcommon
-      webkitgtk_4_1
-    ];
-
-    nativeBuildInputs = [
-      pkg-config
-    ];
+    inherit buildInputs nativeBuildInputs;
   }
