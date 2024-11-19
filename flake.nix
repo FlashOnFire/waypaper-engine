@@ -45,7 +45,7 @@
 
             buildInputs = [
               (rust-bin.stable.latest.default.override {
-                extensions = ["rust-analyzer" "rust-src"];
+                extensions = ["rust-analyzer" "rust-src" "clippy"];
               })
 
               libGL
