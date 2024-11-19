@@ -48,7 +48,6 @@
                 extensions = ["rust-analyzer" "rust-src"];
               })
 
-              mpv
               libGL
               libxkbcommon
               wayland

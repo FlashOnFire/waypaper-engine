@@ -26,7 +26,6 @@ in
       wayland
       libGL
       libxkbcommon
-      mpv
       webkitgtk_4_1
     ];
 
