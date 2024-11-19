@@ -17,5 +17,8 @@ in
 
     cargoLock.lockFile = ../../Cargo.lock;
 
-    inherit buildInputs nativeBuildInputs;
+    inherit buildInputs;
+
+    nativeBuildInputs =
+      nativeBuildInputs ++ [rustPlatform.bindgenHook];
   }
