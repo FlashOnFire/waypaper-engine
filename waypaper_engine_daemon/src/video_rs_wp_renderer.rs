@@ -1,12 +1,14 @@
+use std::cell::OnceCell;
 use std::collections::VecDeque;
 use std::ffi::{c_void, CString};
 use std::path::PathBuf;
 use std::ptr::null;
 use std::rc::Rc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::thread::JoinHandle;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use gl::types::{GLfloat, GLint, GLsizei, GLsizeiptr, GLuint};
 use smithay_client_toolkit::reexports::client::Connection;
@@ -87,13 +89,18 @@ struct RenderContext {
 }
 
 struct RenderData {
-    decoding_thread_handle: JoinHandle<()>,
-    frames: Arc<Mutex<VecDeque<Frame>>>,
     texture: GLuint,
-    size: (u32, u32),
+
     framerate: f32,
+    size: (u32, u32),
+
     last_frame_time: Instant,
     last_frame: Frame,
+
+    decoding_thread_handle: OnceCell<JoinHandle<()>>,
+    frames: Arc<Mutex<VecDeque<Frame>>>,
+
+    shutdown: Arc<AtomicBool>,
 }
 
 impl VideoRSWPRenderer {
@@ -118,15 +125,13 @@ impl VideoRSWPRenderer {
         let size = decoder.size_out();
         let framerate = decoder.frame_rate();
 
-        let (thread_handle, frames_vec) = start_decoding_thread(decoder);
+        let shutdown_arc = Arc::new(AtomicBool::new(false));
+
+        let (thread_handle, frames_vec) = start_decoding_thread(decoder, shutdown_arc.clone());
 
         let ctx = self.render_context.as_mut().unwrap();
 
         unsafe {
-            if let Some(data) = ctx.data.take() {
-                gl::DeleteTextures(1, &data.texture);
-            }
-
             let mut texture: GLuint = 0;
             gl::GenTextures(1, &mut texture);
             gl::BindTexture(gl::TEXTURE_2D, texture);
@@ -143,51 +148,61 @@ impl VideoRSWPRenderer {
                 null(),
             );
 
-            ctx.data = Some(RenderData {
-                decoding_thread_handle: thread_handle,
-                frames: frames_vec.clone(),
+            ctx.data.replace(RenderData {
                 texture,
-                size,
                 framerate,
+                size,
                 last_frame_time: Instant::now(),
                 last_frame: frames_vec.lock().unwrap().front().unwrap().clone(),
+                decoding_thread_handle: OnceCell::from(thread_handle),
+                frames: frames_vec.clone(),
+                shutdown: shutdown_arc,
             });
         }
     }
 }
 
-fn start_decoding_thread(mut decoder: Decoder) -> (JoinHandle<()>, Arc<Mutex<VecDeque<Frame>>>) {
-    let mut frames_vec = VecDeque::with_capacity(5);
+fn start_decoding_thread(
+    mut decoder: Decoder,
+    shutdown: Arc<AtomicBool>,
+) -> (JoinHandle<()>, Arc<Mutex<VecDeque<Frame>>>) {
+    let mut frames_vec = VecDeque::with_capacity(20);
     frames_vec.push_back(decoder.decode().unwrap().1);
     let frames_arc = Arc::new(Mutex::new(frames_vec)); // init with first frame
 
     let weak = Arc::downgrade(&frames_arc);
-    
+
     let handle = thread::spawn(move || {
         tracing::debug!("Spawn decoding thread");
-        'outer: loop {
+        'outer: while (!shutdown.load(Ordering::Relaxed)) {
             let frame = match decoder.decode() {
                 Ok(o) => o.1,
                 Err(err) => match err {
                     Error::ReadExhausted => {
                         decoder.seek_to_start().unwrap();
+                        tracing::debug!("Video ended, seeking to start");
                         decoder.decode().unwrap().1
                     }
-                    _ => panic!("Error while decoding video frames"),
+                    _ => panic!("Error while decoding video frame"),
                 },
             };
 
-            while let Some(strong) = weak.upgrade()
-                && strong.lock().unwrap().len() >= 20
-            {
-                tracing::debug!("Frames in queue >= 20, paused decoding");
-                thread::park();
-                tracing::debug!("Resumed decoding")
+            while (!shutdown.load(Ordering::Relaxed)) {
+                if let Some(strong) = weak.upgrade() {
+                    if strong.lock().unwrap().len() >= 20 {
+                        tracing::debug!("Frames in queue >= 20, paused decoding");
+                        thread::park();
+                        tracing::debug!("Resumed decoding")
+                    } else {
+                        break;
+                    };
+                } else {
+                    break 'outer;
+                }
             }
 
             if let Some(strong) = weak.upgrade() {
                 let mut frames_vec = strong.lock().unwrap();
-                assert!(frames_vec.len() < 20);
                 frames_vec.push_back(frame);
             } else {
                 break 'outer;
@@ -302,8 +317,12 @@ impl WPRendererImpl for VideoRSWPRenderer {
 
         let ctx = self.render_context.as_mut().unwrap();
         let data = ctx.data.as_mut().unwrap();
-        
-        let frame = if Instant::now().duration_since(data.last_frame_time).as_secs_f32() < 1.0 / data.framerate {
+
+        let frame = if Instant::now()
+            .duration_since(data.last_frame_time)
+            .as_secs_f32()
+            < 1.0 / data.framerate
+        {
             tracing::debug!("Not enough time since last frame, rendering last frame again");
             &data.last_frame
         } else {
@@ -312,10 +331,10 @@ impl WPRendererImpl for VideoRSWPRenderer {
             let mut frames = data.frames.lock().unwrap();
             match frames.pop_front() {
                 Some(frame) => {
-                    data.decoding_thread_handle.thread().unpark();
+                    data.decoding_thread_handle.get().unwrap().thread().unpark();
                     data.last_frame = frame;
                     &data.last_frame
-                },
+                }
                 None => {
                     tracing::debug!("No frame to render in queue! Rendering last frame");
                     &data.last_frame
@@ -363,19 +382,27 @@ impl WPRendererImpl for VideoRSWPRenderer {
     }
 }
 
-impl Drop for VideoRSWPRenderer {
+impl Drop for RenderContext {
     fn drop(&mut self) {
-        if let Some(ctx) = self.render_context.as_mut() {
-            unsafe {
-                if let Some(data) = &ctx.data {
-                    gl::DeleteTextures(1, &data.texture);
-                }
+        unsafe {
+            tracing::debug!("Destroying video render context");
+            gl::DeleteBuffers(1, &self.ebo);
+            gl::DeleteBuffers(1, &self.vbo);
+            gl::DeleteVertexArrays(1, &self.vao);
+            gl::DeleteProgram(self.program);
+        }
+    }
+}
 
-                gl::DeleteBuffers(1, &ctx.ebo);
-                gl::DeleteBuffers(1, &ctx.vbo);
-                gl::DeleteVertexArrays(1, &ctx.vao);
-                gl::DeleteProgram(ctx.program);
-            }
+impl Drop for RenderData {
+    fn drop(&mut self) {
+        self.shutdown.store(true, Ordering::Relaxed);
+        self.frames.lock().unwrap().clear();
+        self.decoding_thread_handle.get().unwrap().thread().unpark();
+
+        let _ = self.decoding_thread_handle.take().unwrap().join();
+        unsafe {
+            gl::DeleteTextures(1, &self.texture);
         }
     }
 }
