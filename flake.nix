@@ -33,29 +33,39 @@
           inherit system;
           overlays = [(import rust-overlay)];
         };
+
+        rustVersion = pkgs.rust-bin.nightly.latest.default;
+        buildInputs = with pkgs; [
+          llvmPackages.clang
+          libGL
+          libxkbcommon
+          wayland
+          webkitgtk_4_1
+          ffmpeg-full
+          libclang
+        ];
+        nativeBuildInputs = with pkgs; [pkg-config];
       in {
         packages = {
           default = self'.packages.waypaper-engine;
-          waypaper-engine = pkgs.callPackage ./packaging/nix {};
+          waypaper-engine = pkgs.callPackage ./waypaper-engine {
+            inherit rustVersion buildInputs nativeBuildInputs;
+          };
         };
 
-        devShells.default = with pkgs;
-          mkShell rec {
-            nativeBuildInputs = [pkg-config];
+        devShells.default = pkgs.mkShell {
+          inherit nativeBuildInputs;
 
-            buildInputs = [
-              (rust-bin.stable.latest.default.override {
+          buildInputs =
+            [
+              (rustVersion.override {
                 extensions = ["rust-analyzer" "rust-src" "clippy"];
               })
+            ]
+            ++ buildInputs;
 
-              libGL
-              libxkbcommon
-              wayland
-              webkitgtk_4_1
-            ];
-
-            LD_LIBRARY_PATH = lib.makeLibraryPath buildInputs;
-          };
+          LD_LIBRARY_PATH = lib.makeLibraryPath buildInputs;
+        };
 
         formatter = pkgs.alejandra;
       };
