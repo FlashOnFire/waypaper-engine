@@ -21,3 +21,5 @@ jobs:
         nix_path: nixpkgs=channel:nixos-unstable
     - name: Build and run tests
       run: nix build
+    - name: Show logs
+      run: nix log
