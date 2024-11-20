@@ -13,7 +13,7 @@ This project is in a **very immature state** and is not ready for general use.
 
 If you're trying it out, please consider it a **preview** and not a fully functional application. Contributions and feedback are welcome as we continue to improve!
 
-## Currently working:
+## Current app state:
 ### 🟢 Fully Functional:
 - **Rendering through the ``wlr_layer_shell protocol``:**  
   Handles wallpaper rendering on supported Wayland compositors seamlessly. Tested on Hyprland and KWin.
