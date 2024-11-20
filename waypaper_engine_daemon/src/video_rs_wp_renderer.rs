@@ -13,7 +13,7 @@ use std::time::Instant;
 use gl::types::{GLfloat, GLint, GLsizei, GLsizeiptr, GLuint};
 use smithay_client_toolkit::reexports::client::Connection;
 use video_rs::hwaccel::HardwareAccelerationDeviceType;
-use video_rs::{Decoder, DecoderBuilder, Error, Frame};
+use video_rs::{Decoder, DecoderBuilder, Error, Frame, Time};
 
 use waypaper_engine_shared::project::WallpaperType;
 
@@ -122,6 +122,7 @@ impl VideoRSWPRenderer {
             .with_hardware_acceleration(HardwareAccelerationDeviceType::VaApi)
             .build()
             .expect("Failed to create decoder");
+
         let size = decoder.size_out();
         let framerate = decoder.frame_rate();
 
@@ -172,22 +173,31 @@ fn start_decoding_thread(
 
     let weak = Arc::downgrade(&frames_arc);
 
+    let (mut decoder_split, mut reader, stream_index) = decoder.into_parts();
+
     let handle = thread::spawn(move || {
         tracing::debug!("Spawn decoding thread");
-        'outer: while (!shutdown.load(Ordering::Relaxed)) {
-            let frame = match decoder.decode() {
-                Ok(o) => o.1,
+        'outer: while !shutdown.load(Ordering::Relaxed) {
+            let packet_result = reader.read(stream_index);
+            
+            let packet = match packet_result {
+                Ok(packet) => packet,
                 Err(err) => match err {
                     Error::ReadExhausted => {
-                        decoder.seek_to_start().unwrap();
                         tracing::debug!("Video ended, seeking to start");
-                        decoder.decode().unwrap().1
-                    }
+                        reader.seek_to_start().unwrap();
+                        continue;
+                    },
                     _ => panic!("Error while decoding video frame"),
                 },
             };
+            
+            let (time, frame) = match decoder_split.decode(packet).expect("Failed to decode video frame") {
+                Some(v) => v,
+                None => continue,
+            };
 
-            while (!shutdown.load(Ordering::Relaxed)) {
+            while !shutdown.load(Ordering::Relaxed) {
                 if let Some(strong) = weak.upgrade() {
                     if strong.lock().unwrap().len() >= 20 {
                         tracing::debug!("Frames in queue >= 20, paused decoding");
@@ -208,6 +218,12 @@ fn start_decoding_thread(
                 break 'outer;
             }
         }
+        
+        tracing::debug!("Got out of the decoding loop, draining decoder");
+        while let Ok(option) = decoder_split.drain_raw() && option.is_some() {
+            tracing::debug!("Draining frame");
+        }
+
         tracing::debug!("Exited decoding Thread!");
     });
 
