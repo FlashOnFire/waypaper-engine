@@ -13,7 +13,7 @@ use std::time::Instant;
 use gl::types::{GLfloat, GLint, GLsizei, GLsizeiptr, GLuint};
 use smithay_client_toolkit::reexports::client::Connection;
 use video_rs::hwaccel::HardwareAccelerationDeviceType;
-use video_rs::{Decoder, DecoderBuilder, Error, Frame, Time};
+use video_rs::{Decoder, DecoderBuilder, Error, Frame};
 
 use waypaper_engine_shared::project::WallpaperType;
 
@@ -22,55 +22,11 @@ use crate::gl_utils::{compile_shader, link_program};
 use crate::wallpaper::Wallpaper;
 use crate::wallpaper_renderer::WPRendererImpl;
 
-#[rustfmt::skip]
-static VERTEX_DATA: [GLfloat; 32] = [
-     1.0,  1.0,  0.0,    1.0, 0.0, 0.0,    1.0, 1.0,
-     1.0, -1.0,  0.0,    0.0, 1.0, 0.0,    1.0, 0.0,
-    -1.0, -1.0,  0.0,    0.0, 0.0, 1.0,    0.0, 0.0,
-    -1.0,  1.0,  0.0,    0.0, 0.0, 1.0,    0.0, 1.0,
-];
+use crate::rendering_backends::video_backend_consts::{
+    FRAGMENT_SHADER_SRC, INDICES, THREAD_FRAME_BUFFER_SIZE, VERTEX_DATA, VERTEX_SHADER_SRC,
+};
 
-#[rustfmt::skip]
-static INDICES: [GLint; 6] = [
-    0, 1, 3,
-    1, 2, 3,
-];
-
-const VERTEX_SHADER_SRC: &str = r#"
-    #version 330 core
-
-    layout (location = 0) in vec3 aPos;
-    layout (location = 1) in vec3 aColor;
-    layout (location = 2) in vec2 aTexCoord;
-
-    out vec3 color;
-    out vec2 tex_coord;
-
-    void main()
-    {
-        gl_Position = vec4(aPos.x, -aPos.y, aPos.z, 1.0);
-        color = aColor;
-        tex_coord = aTexCoord;
-    }
-"#;
-
-const FRAGMENT_SHADER_SRC: &str = r#"
-    #version 330 core
-
-    out vec4 out_color;
-
-    in vec3 color;
-    in vec2 tex_coord;
-
-    uniform sampler2D tex;
-
-    void main()
-    {
-        out_color = texture(tex, tex_coord);
-    }
-"#;
-
-pub struct VideoRSWPRenderer {
+pub struct VideoWPRenderer {
     _connection: Rc<Connection>,
     _egl_state: Rc<EGLState>,
 
@@ -103,7 +59,7 @@ struct RenderData {
     shutdown: Arc<AtomicBool>,
 }
 
-impl VideoRSWPRenderer {
+impl VideoWPRenderer {
     pub(crate) fn new(connection: Rc<Connection>, egl_state: Rc<EGLState>) -> Self {
         Self {
             _connection: connection,
@@ -127,7 +83,6 @@ impl VideoRSWPRenderer {
         let framerate = decoder.frame_rate();
 
         let shutdown_arc = Arc::new(AtomicBool::new(false));
-
         let (thread_handle, frames_vec) = start_decoding_thread(decoder, shutdown_arc.clone());
 
         let ctx = self.render_context.as_mut().unwrap();
@@ -167,7 +122,7 @@ fn start_decoding_thread(
     mut decoder: Decoder,
     shutdown: Arc<AtomicBool>,
 ) -> (JoinHandle<()>, Arc<Mutex<VecDeque<Frame>>>) {
-    let mut frames_vec = VecDeque::with_capacity(20);
+    let mut frames_vec = VecDeque::with_capacity(THREAD_FRAME_BUFFER_SIZE);
     frames_vec.push_back(decoder.decode().unwrap().1);
     let frames_arc = Arc::new(Mutex::new(frames_vec)); // init with first frame
 
@@ -179,7 +134,7 @@ fn start_decoding_thread(
         tracing::debug!("Spawn decoding thread");
         'outer: while !shutdown.load(Ordering::Relaxed) {
             let packet_result = reader.read(stream_index);
-            
+
             let packet = match packet_result {
                 Ok(packet) => packet,
                 Err(err) => match err {
@@ -187,19 +142,22 @@ fn start_decoding_thread(
                         tracing::debug!("Video ended, seeking to start");
                         reader.seek_to_start().unwrap();
                         continue;
-                    },
+                    }
                     _ => panic!("Error while decoding video frame"),
                 },
             };
-            
-            let (time, frame) = match decoder_split.decode(packet).expect("Failed to decode video frame") {
+
+            let (time, frame) = match decoder_split
+                .decode(packet)
+                .expect("Failed to decode video frame")
+            {
                 Some(v) => v,
                 None => continue,
             };
 
             while !shutdown.load(Ordering::Relaxed) {
                 if let Some(strong) = weak.upgrade() {
-                    if strong.lock().unwrap().len() >= 20 {
+                    if strong.lock().unwrap().len() >= THREAD_FRAME_BUFFER_SIZE {
                         tracing::debug!("Frames in queue >= 20, paused decoding");
                         thread::park();
                         tracing::debug!("Resumed decoding")
@@ -218,7 +176,7 @@ fn start_decoding_thread(
                 break 'outer;
             }
         }
-        
+
         tracing::debug!("Got out of the decoding loop, draining decoder");
         while let Ok(Some(_)) = decoder_split.drain_raw() {
             tracing::debug!("Draining frame");
@@ -230,7 +188,7 @@ fn start_decoding_thread(
     (handle, frames_arc)
 }
 
-impl WPRendererImpl for VideoRSWPRenderer {
+impl WPRendererImpl for VideoWPRenderer {
     fn init_render(&mut self) {
         unsafe {
             let mut vao: GLuint = 0;
@@ -243,8 +201,8 @@ impl WPRendererImpl for VideoRSWPRenderer {
             gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
             gl::BufferData(
                 gl::ARRAY_BUFFER,
-                (VERTEX_DATA.len() * std::mem::size_of::<GLfloat>()) as GLsizeiptr,
-                std::mem::transmute(&VERTEX_DATA[0]),
+                (VERTEX_DATA.len() * size_of::<GLfloat>()) as GLsizeiptr,
+                &VERTEX_DATA[0] as *const f32 as *const c_void,
                 gl::STATIC_DRAW,
             );
 
@@ -264,7 +222,7 @@ impl WPRendererImpl for VideoRSWPRenderer {
                 3,
                 gl::FLOAT,
                 gl::FALSE,
-                (8 * std::mem::size_of::<GLfloat>()) as GLsizei,
+                (8 * size_of::<GLfloat>()) as GLsizei,
                 null(),
             );
             gl::EnableVertexAttribArray(0);
@@ -274,8 +232,8 @@ impl WPRendererImpl for VideoRSWPRenderer {
                 3,
                 gl::FLOAT,
                 gl::FALSE,
-                (8 * std::mem::size_of::<GLfloat>()) as GLsizei,
-                (3 * std::mem::size_of::<GLfloat>()) as *const c_void,
+                (8 * size_of::<GLfloat>()) as GLsizei,
+                (3 * size_of::<GLfloat>()) as *const c_void,
             );
             gl::EnableVertexAttribArray(1);
 
@@ -284,8 +242,8 @@ impl WPRendererImpl for VideoRSWPRenderer {
                 2,
                 gl::FLOAT,
                 gl::FALSE,
-                (8 * std::mem::size_of::<GLfloat>()) as GLsizei,
-                (6 * std::mem::size_of::<GLfloat>()) as *const c_void,
+                (8 * size_of::<GLfloat>()) as GLsizei,
+                (6 * size_of::<GLfloat>()) as *const c_void,
             );
             gl::EnableVertexAttribArray(2);
 
@@ -295,8 +253,8 @@ impl WPRendererImpl for VideoRSWPRenderer {
             gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, ebo);
             gl::BufferData(
                 gl::ELEMENT_ARRAY_BUFFER,
-                (INDICES.len() * std::mem::size_of::<GLfloat>()) as GLsizeiptr,
-                std::mem::transmute(&INDICES[0]),
+                (INDICES.len() * size_of::<GLfloat>()) as GLsizeiptr,
+                &INDICES[0] as *const i32 as *const c_void,
                 gl::STATIC_DRAW,
             );
 

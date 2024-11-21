@@ -16,7 +16,7 @@ mod wallpaper_renderer;
 mod wl_renderer;
 
 mod gl_utils;
-mod video_rs_wp_renderer;
+mod rendering_backends;
 
 fn main() -> Result<(), Box<dyn Error>> {
     tracing_subscriber::fmt()
