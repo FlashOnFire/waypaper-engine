@@ -1,15 +1,10 @@
 {
   inputs = {
-    nixpkgs.url = "nixpkgs";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
     flake-parts = {
       url = "github:hercules-ci/flake-parts";
       inputs.nixpkgs-lib.follows = "nixpkgs";
-    };
-
-    rust-overlay = {
-      url = "github:oxalica/rust-overlay";
-      inputs.nixpkgs.follows = "nixpkgs";
     };
   };
 
@@ -17,54 +12,28 @@
     self,
     nixpkgs,
     flake-parts,
-    rust-overlay,
     ...
   } @ inputs:
     flake-parts.lib.mkFlake {inherit inputs;} {
-      systems = ["x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin"];
+      systems = ["x86_64-linux" "aarch64-linux"];
 
       perSystem = {
         self',
-        lib,
+        pkgs,
         system,
         ...
-      }: let
-        pkgs = import nixpkgs {
-          inherit system;
-          overlays = [(import rust-overlay)];
-        };
-
-        rustVersion = pkgs.rust-bin.nightly.latest.default;
-        buildInputs = with pkgs; [
-          llvmPackages.clang
-          libGL
-          libxkbcommon
-          wayland
-          webkitgtk_4_1
-          ffmpeg-full
-          libclang
-        ];
-        nativeBuildInputs = with pkgs; [pkg-config];
-      in {
+      }: {
         packages = {
-          default = self'.packages.waypaper-engine;
-          waypaper-engine = pkgs.callPackage ./packaging/nix {
-            inherit rustVersion buildInputs nativeBuildInputs;
-          };
+          daemon = pkgs.callPackage ./packaging/nix/daemon.nix {inherit self;};
+          ui = pkgs.callPackage ./packaging/nix/ui.nix {inherit self;};
         };
 
         devShells.default = pkgs.mkShell {
-          inherit nativeBuildInputs;
+          inputsFrom = with self'.packages; [daemon ui];
+          packages = with pkgs; [clippy rustfmt];
 
-          buildInputs =
-            [
-              (rustVersion.override {
-                extensions = ["rust-analyzer" "rust-src" "clippy"];
-              })
-            ]
-            ++ buildInputs;
-
-          LD_LIBRARY_PATH = lib.makeLibraryPath buildInputs;
+          RUST_SRC_PATH = "${pkgs.rustPlatform.rustLibSrc}";
+          LIBCLANG_PATH = "${pkgs.libclang.lib}/lib";
         };
 
         formatter = pkgs.alejandra;
