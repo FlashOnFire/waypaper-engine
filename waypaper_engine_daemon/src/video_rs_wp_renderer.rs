@@ -220,7 +220,7 @@ fn start_decoding_thread(
         }
         
         tracing::debug!("Got out of the decoding loop, draining decoder");
-        while let Ok(option) = decoder_split.drain_raw() && option.is_some() {
+        while let Ok(Some(_)) = decoder_split.drain_raw() {
             tracing::debug!("Draining frame");
         }
 
