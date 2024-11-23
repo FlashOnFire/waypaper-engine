@@ -5,7 +5,8 @@ use smithay_client_toolkit::reexports::client::Connection;
 use waypaper_engine_shared::project::WallpaperType;
 
 use crate::egl::EGLState;
-use crate::rendering_backends::video_wp_renderer::VideoWPRenderer;
+use crate::rendering_backends::video::video_wp_renderer::VideoWPRenderer;
+use crate::rendering_backends::scene::scene_wp_renderer::SceneWPRenderer;
 use crate::wallpaper::Wallpaper;
 
 pub struct WPRenderer {
@@ -36,7 +37,12 @@ impl WPRenderer {
                         self.egl_state.clone(),
                     )));
                 }
-                Wallpaper::Scene { .. } => {}
+                Wallpaper::Scene { .. } => {
+                    self.renderer = Some(Box::new(SceneWPRenderer::new(
+                        self.connection.clone(),
+                        self.egl_state.clone(),
+                    )));
+                }
                 Wallpaper::Web { .. } => {}
                 Wallpaper::Preset { .. } => {}
             }
@@ -76,10 +82,6 @@ impl WPRenderer {
 }
 
 pub(crate) trait WPRendererImpl {
-    fn clear_color(&self) -> (f32, f32, f32) {
-        (0.0, 0.0, 0.0)
-    }
-
     fn init_render(&mut self);
 
     fn setup_wallpaper(&mut self, wp: &Wallpaper);
@@ -87,4 +89,8 @@ pub(crate) trait WPRendererImpl {
     fn render(&mut self, width: u32, height: u32);
 
     fn get_wp_type(&self) -> WallpaperType;
+
+    fn clear_color(&self) -> (f32, f32, f32) {
+        (0.0, 0.0, 0.0)
+    }
 }

@@ -84,6 +84,10 @@ impl ScenePackage {
 
         Ok(())
     }
+    
+    pub fn get_file(&self, name: &str) -> Option<&FileContent> {
+        self.contents.get(name)
+    }
 }
 
 fn read_header(data: &mut Cursor<Vec<u8>>) -> u32 {
@@ -110,7 +114,7 @@ fn read_files(data: &mut Cursor<Vec<u8>>, file_count: u32) -> Vec<FileEntry> {
     files
 }
 
-pub fn read_file(data: &mut Cursor<Vec<u8>>, header_offset: u64, file: &FileEntry) -> FileContent {
+fn read_file(data: &mut Cursor<Vec<u8>>, header_offset: u64, file: &FileEntry) -> FileContent {
     data.rewind().unwrap();
     data.set_position(header_offset + file.offset as u64);
 

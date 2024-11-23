@@ -22,7 +22,7 @@ use crate::gl_utils::{compile_shader, link_program};
 use crate::wallpaper::Wallpaper;
 use crate::wallpaper_renderer::WPRendererImpl;
 
-use crate::rendering_backends::video_backend_consts::{
+use crate::rendering_backends::video::video_backend_consts::{
     FRAGMENT_SHADER_SRC, INDICES, THREAD_FRAME_BUFFER_SIZE, VERTEX_DATA, VERTEX_SHADER_SRC,
 };
 

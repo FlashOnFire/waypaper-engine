@@ -86,7 +86,7 @@ fn loaded(
         }
     }
 
-    wallpapers.retain(|wp| wp.wallpaper_type == WallpaperType::Video);
+    wallpapers.retain(|wp| wp.wallpaper_type == WallpaperType::Video || wp.wallpaper_type == WallpaperType::Scene);
 
     let mut wallpaper_infos = wallpaper_infos.lock().unwrap();
     wallpapers
