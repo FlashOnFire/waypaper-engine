@@ -3,14 +3,13 @@ use smithay_client_toolkit::reexports::client::Connection;
 use waypaper_engine_shared::project::WallpaperType;
 use crate::egl::EGLState;
 use crate::rendering_backends::scene::scene_structs::Scene;
-use crate::scene_package::ScenePackage;
 use crate::wallpaper::Wallpaper;
 use crate::wallpaper_renderer::WPRendererImpl;
 
-pub(crate)  struct SceneWPRenderer {
+pub(crate) struct SceneWPRenderer {
     _connection: Rc<Connection>,
     _egl_state: Rc<EGLState>,
-    scene_package: Option<ScenePackage>,
+    render_context: Option<RenderContext>,
 }
 
 
@@ -19,9 +18,13 @@ impl SceneWPRenderer {
         Self {
             _connection: connection,
             _egl_state: egl_state,
-            scene_package: None,
+            render_context: None,
         }
     }
+}
+
+struct RenderContext {
+    scene: Scene,
 }
 
 impl WPRendererImpl for SceneWPRenderer {
@@ -32,11 +35,12 @@ impl WPRendererImpl for SceneWPRenderer {
 
     fn setup_wallpaper(&mut self, wp: &Wallpaper) {
         match wp {
-            Wallpaper::Scene { project, scene_package } => {
+            Wallpaper::Scene { scene_package, .. } => {
                 let scene_json = scene_package.get_file("scene.json").expect("Couldn't find scene.json file");
                 let scene: Scene = serde_json::from_slice(scene_json.bytes()).expect("Couldn't parse scene.json");
                 
-                println!("{:?}", scene);
+                tracing::debug!("{:?}", scene);
+                self.render_context = Some(RenderContext { scene });
             },
             _ => unreachable!(),
         }
@@ -51,6 +55,11 @@ impl WPRendererImpl for SceneWPRenderer {
     }
 
     fn clear_color(&self) -> (f32, f32, f32) {
-        (0.0, 0.0, 0.0)
+        if let Some(render_context) = self.render_context.as_ref() {
+            let clear_color = render_context.scene.general.ambientcolor;
+            (clear_color.0 as f32, clear_color.1 as f32, clear_color.2 as f32)
+        } else {
+            (0.0, 0.0, 0.0)
+        }
     }
 }

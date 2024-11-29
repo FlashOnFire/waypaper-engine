@@ -33,7 +33,7 @@ pub struct General {
     pub ambientcolor: (f64, f64, f64),
     pub bloom: bool,
     pub bloomstrength: f64,
-    pub bloomthreshold: i64,
+    pub bloomthreshold: f64,
     pub camerafade: bool,
     pub cameraparallax: bool,
     pub cameraparallaxamount: f64,

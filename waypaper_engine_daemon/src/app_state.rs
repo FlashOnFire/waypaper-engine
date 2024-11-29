@@ -66,18 +66,29 @@ impl AppState {
                             let path = self.wpe_dir.join(id.to_string());
                             if path.exists() && path.is_dir() {
                                 let wallpaper = Wallpaper::new(path).unwrap();
+                                let path = self
+                                    .wpe_dir
+                                    .join(id.to_string());
+                                match wallpaper {
+                                    Wallpaper::Video { ref project, .. } => {
+                                        let video_path = path.join(project.file.as_ref().unwrap());
 
-                                if let Wallpaper::Video { ref project, .. } = wallpaper {
-                                    let path = self
-                                        .wpe_dir
-                                        .join(project.workshop_id.unwrap().to_string())
-                                        .join(project.file.as_ref().unwrap());
+                                        if video_path.exists() {
+                                            tracing::info!("Found video file ! (Path : {video_path:?})");
 
-                                    if path.exists() {
-                                        tracing::info!("Found video file ! (Path : {path:?})");
+                                            self.rendering_context.set_wallpaper(output, wallpaper);
+                                        }
+                                    },
+                                    Wallpaper::Scene {..} => {
+                                        let scene_pkg_file = path.join("scene.pkg");
 
-                                        self.rendering_context.set_wallpaper(output, wallpaper);
+                                        if scene_pkg_file.exists() {
+                                            tracing::info!("Found scene package file ! (Path : {scene_pkg_file:?})");
+
+                                            self.rendering_context.set_wallpaper(output, wallpaper);
+                                        }
                                     }
+                                    _ => {}
                                 }
                             }
                         } else {
