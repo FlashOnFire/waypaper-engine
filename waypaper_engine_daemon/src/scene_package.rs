@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::fs::create_dir_all;
 use std::io::{Cursor, Read, Seek};
 use std::path::{Path, PathBuf};
-
+use tracing::Level;
 use crate::file_reading_utils::{read_str, read_u32};
 
 #[derive(Debug, Clone)]
@@ -45,7 +45,7 @@ impl ScenePackage {
         assert!(path.exists() && path.is_file());
 
         let mut data: Cursor<Vec<u8>> = Cursor::new(fs::read(path)?);
-        tracing::debug!("Data Length : {}", data.get_ref().len());
+        tracing::debug!("Data Length: {}", data.get_ref().len());
 
         let file_count = read_header(&mut data);
 
@@ -55,7 +55,17 @@ impl ScenePackage {
 
         let header_offset = data.position();
         for entry in &files {
-            tracing::debug!("\t{} - {} - {}", entry.name, entry.offset, entry.size);
+            if (tracing::enabled!(Level::DEBUG)) {
+                let formatted_size = if entry.size > 100000000 {
+                    format!("{} Mb ", entry.size % 100000000).to_string()
+                } else if entry.size > 1000 {
+                    format!("{} Kb ", entry.size % 1000).to_string()
+                } else{
+                    format!("{} b", entry.size).to_string()
+                };
+                
+                tracing::debug!("\tName: {} - Offset: {}, Size: {}", entry.name, entry.offset, formatted_size);
+            }
             contents.insert(
                 entry.name.clone(),
                 read_file(&mut data, header_offset, entry),
@@ -92,7 +102,11 @@ impl ScenePackage {
 
 fn read_header(data: &mut Cursor<Vec<u8>>) -> u32 {
     let version = read_str(data);
-    assert_eq!(version, "PKGV0001");
+    assert!(version.starts_with("PKGV"), "Error reading PKG file header: {}", version);
+    
+    if (version != "PKGV0001") {
+        tracing::warn!("Trying to unpack unsupported PKG file version: {}, if you encounter bugs please report them on the git repository", version);
+    }
 
     let file_count = read_u32(data);
     tracing::debug!("{version} - File count : {file_count}");
