@@ -30,7 +30,7 @@ impl AppState {
     }
 
     pub fn run(&mut self) -> Result<(), Box<dyn Error>> {
-        video_rs::init().unwrap();
+        video_rs::init()?;
 
         let (tx, rx) = mpsc::channel::<IPCRequest>();
 
