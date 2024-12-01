@@ -1,3 +1,5 @@
+use std::ops::{Deref, DerefMut};
+use std::path::PathBuf;
 use std::rc::Rc;
 
 use smithay_client_toolkit::reexports::client::Connection;
@@ -7,12 +9,13 @@ use waypaper_engine_shared::project::WallpaperType;
 use crate::egl::EGLState;
 use crate::rendering_backends::scene::scene_wp_renderer::SceneWPRenderer;
 use crate::rendering_backends::video::video_wp_renderer::VideoWPRenderer;
+use crate::scene_package::ScenePackage;
 use crate::wallpaper::Wallpaper;
 
 pub struct WPRenderer {
     _connection: Rc<Connection>,
     _egl_state: Rc<EGLState>,
-    renderer: Option<Box<dyn WPRendererImpl>>,
+    renderer: Option<RenderingBackend>,
     renderer_initialized: bool,
 }
 
@@ -26,16 +29,22 @@ impl WPRenderer {
         }
     }
 
-    pub fn setup_for(&mut self, wallpaper: &Wallpaper) {
-        if self.renderer.is_none()
-            || self.renderer.as_ref().unwrap().get_wp_type() != wallpaper.get_wp_type()
-        {
+    pub fn setup_wallpaper(&mut self, wallpaper: &Wallpaper) {
+        if self.renderer.is_none() || self.renderer.as_ref().unwrap().current_backend_type() != wallpaper.wp_type() {
             match wallpaper {
-                Wallpaper::Video { .. } => {
-                    self.renderer = Some(Box::new(VideoWPRenderer::new()));
+                Wallpaper::Video {
+                    ref project,
+                    base_dir_path,
+                } => {
+                    let mut renderer = Box::new(VideoWPRenderer::new());
+                    renderer
+                        .setup_video_wallpaper(base_dir_path.join(project.file.as_ref().unwrap()));
+                    self.renderer = Some(RenderingBackend::Video(renderer));
                 }
-                Wallpaper::Scene { .. } => {
-                    self.renderer = Some(Box::new(SceneWPRenderer::new()));
+                Wallpaper::Scene { scene_package, .. } => {
+                    let mut renderer = Box::new(SceneWPRenderer::new());
+                    renderer.setup_scene_wallpaper(scene_package);
+                    self.renderer = Some(RenderingBackend::Scene(renderer));
                 }
                 Wallpaper::Web { .. } => {}
                 Wallpaper::Preset { .. } => {}
@@ -43,8 +52,6 @@ impl WPRenderer {
 
             self.renderer_initialized = false;
         }
-
-        self.renderer.as_mut().unwrap().setup_wallpaper(wallpaper);
     }
 
     pub(crate) fn clear_color(&self) -> (f32, f32, f32) {
@@ -78,13 +85,51 @@ impl WPRenderer {
 pub(crate) trait WPRendererImpl {
     fn init_render(&mut self);
 
-    fn setup_wallpaper(&mut self, wp: &Wallpaper);
-
     fn render(&mut self, width: u32, height: u32);
-
-    fn get_wp_type(&self) -> WallpaperType;
 
     fn clear_color(&self) -> (f32, f32, f32) {
         (0.0, 0.0, 0.0)
+    }
+}
+
+pub(crate) trait VideoRenderingBackend {
+    fn setup_video_wallpaper(&mut self, video_path: PathBuf);
+}
+
+pub(crate) trait SceneRenderingBackend {
+    fn setup_scene_wallpaper(&mut self, scene_package: &ScenePackage);
+}
+
+enum RenderingBackend {
+    Video(Box<dyn WPRendererImpl>),
+    Scene(Box<dyn WPRendererImpl>),
+}
+
+impl RenderingBackend {
+    fn current_backend_type(&self) -> WallpaperType {
+        match self {
+            RenderingBackend::Video(_) => WallpaperType::Video,
+            RenderingBackend::Scene(_) => WallpaperType::Scene,
+        }
+    }
+}
+
+impl Deref for RenderingBackend {
+    type Target = dyn WPRendererImpl;
+
+    fn deref(&self) -> &Self::Target {
+        match self {
+            RenderingBackend::Video(renderer) => renderer.as_ref(),
+            RenderingBackend::Scene(renderer) => renderer.as_ref(),
+        }
+    }
+}
+
+impl DerefMut for RenderingBackend {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        match self {
+            RenderingBackend::Video(renderer) => renderer.as_mut(),
+            RenderingBackend::Scene(renderer) => renderer.as_mut(),
+        }  
     }
 }

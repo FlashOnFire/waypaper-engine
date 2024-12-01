@@ -44,11 +44,11 @@ pub struct WEProject {
 
     #[serde(deserialize_with = "as_u64_opt")]
     #[serde(default)]
-    #[serde(rename = "lowercase")]
+    #[serde(rename = "workshopid")]
     pub workshop_id: Option<u64>,
 
     #[serde(default)]
-    #[serde(rename = "lowercase")]
+    #[serde(rename = "workshopurl")]
     pub workshop_url: Option<String>,
 }
 

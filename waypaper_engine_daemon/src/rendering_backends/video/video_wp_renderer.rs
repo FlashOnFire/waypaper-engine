@@ -3,24 +3,17 @@ use std::collections::VecDeque;
 use std::ffi::{c_void, CString};
 use std::path::PathBuf;
 use std::ptr::null;
-use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::thread::JoinHandle;
 use std::time::Instant;
 
+use crate::gl_utils::{compile_shader, link_program};
+use crate::wallpaper_renderer::{VideoRenderingBackend, WPRendererImpl};
 use gl::types::{GLfloat, GLint, GLsizei, GLsizeiptr, GLuint};
-use smithay_client_toolkit::reexports::client::Connection;
 use video_rs::hwaccel::HardwareAccelerationDeviceType;
 use video_rs::{Decoder, DecoderBuilder, Error, Frame};
-
-use waypaper_engine_shared::project::WallpaperType;
-
-use crate::egl::EGLState;
-use crate::gl_utils::{compile_shader, link_program};
-use crate::wallpaper::Wallpaper;
-use crate::wallpaper_renderer::WPRendererImpl;
 
 use crate::rendering_backends::video::video_backend_consts::{
     FRAGMENT_SHADER_SRC, INDICES, THREAD_FRAME_BUFFER_SIZE, VERTEX_DATA, VERTEX_SHADER_SRC,
@@ -110,6 +103,15 @@ impl VideoWPRenderer {
                 shutdown: shutdown_arc,
             });
         }
+    }
+}
+
+impl VideoRenderingBackend for VideoWPRenderer {
+    fn setup_video_wallpaper(&mut self, video_path: PathBuf) {
+        tracing::info!("Setup video_rs wp");
+
+        self.video_path = Some(video_path);
+        self.started_playback = false;
     }
 }
 
@@ -263,21 +265,6 @@ impl WPRendererImpl for VideoWPRenderer {
         }
     }
 
-    fn setup_wallpaper(&mut self, wp: &Wallpaper) {
-        tracing::debug!("Setup video_rs wp");
-
-        match wp {
-            Wallpaper::Video {
-                ref project,
-                base_dir_path,
-            } => {
-                self.video_path = Some(base_dir_path.join(project.file.as_ref().unwrap()));
-                self.started_playback = false;
-            }
-            _ => unreachable!(),
-        }
-    }
-
     fn render(&mut self, width: u32, height: u32) {
         if !self.started_playback {
             self.start_playback();
@@ -344,10 +331,6 @@ impl WPRendererImpl for VideoWPRenderer {
             gl::UseProgram(0);
             gl::BindVertexArray(0);
         }
-    }
-
-    fn get_wp_type(&self) -> WallpaperType {
-        WallpaperType::Video
     }
 }
 

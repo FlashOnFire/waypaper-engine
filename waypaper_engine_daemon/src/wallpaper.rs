@@ -1,19 +1,16 @@
 use std::error::Error;
-use std::path::{Path, PathBuf};
-use std::rc::Rc;
+use std::path::PathBuf;
 use std::str::FromStr;
 
-use smithay_client_toolkit::reexports::client::Connection;
 
 use waypaper_engine_shared::project::{WallpaperType, WEProject};
 
-use crate::egl::EGLState;
 use crate::scene_package::ScenePackage;
 
 pub enum Wallpaper {
     Video {
-        base_dir_path: PathBuf,
         project: WEProject,
+        base_dir_path: PathBuf,
     },
     Scene {
         project: WEProject,
@@ -59,7 +56,7 @@ impl Wallpaper {
         })
     }
     
-    pub fn get_wp_type(&self) -> WallpaperType {
+    pub fn wp_type(&self) -> WallpaperType {
         match self {
             Wallpaper::Video { .. } => WallpaperType::Video,
             Wallpaper::Scene { .. } => WallpaperType::Scene,

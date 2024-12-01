@@ -66,7 +66,8 @@ impl RenderingContext {
     }
 
     pub fn tick(&mut self) {
-        self.event_queue.roundtrip(&mut self.wl_state).unwrap(); // FIXME: roundtrip is probably overkill but we can't use blocking_dispatch and dispatch_pending causes frame drops
+        // FIXME: roundtrip is probably overkill but we can't use blocking_dispatch and dispatch_pending causes frame drops
+        self.event_queue.roundtrip(&mut self.wl_state).unwrap();
 
         /*if self.wl_state.layers.values().any(|layer| layer.exit) {
             tracing::debug!("Exiting");
@@ -178,7 +179,7 @@ impl WLState {
         .expect("Unable to create an EGL surface");
 
         layer.commit();
-        self.connection.roundtrip().unwrap();
+        self.connection.roundtrip().unwrap(); // Block until the wayland server has processed everything
 
         let layer = SimpleLayer {
             exit: false,
@@ -441,7 +442,7 @@ impl SeatHandler for WLState {
 
 impl SimpleLayer {
     pub fn set_wallpaper(&mut self, wp: Wallpaper) {
-        self.renderer.setup_for(&wp);
+        self.renderer.setup_wallpaper(&wp);
         self.wallpaper = Some(wp);
 
         self.egl_state.attach_context(self.egl_window_surface);
