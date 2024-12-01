@@ -5,13 +5,13 @@ use smithay_client_toolkit::reexports::client::Connection;
 use waypaper_engine_shared::project::WallpaperType;
 
 use crate::egl::EGLState;
-use crate::rendering_backends::video::video_wp_renderer::VideoWPRenderer;
 use crate::rendering_backends::scene::scene_wp_renderer::SceneWPRenderer;
+use crate::rendering_backends::video::video_wp_renderer::VideoWPRenderer;
 use crate::wallpaper::Wallpaper;
 
 pub struct WPRenderer {
-    connection: Rc<Connection>,
-    egl_state: Rc<EGLState>,
+    _connection: Rc<Connection>,
+    _egl_state: Rc<EGLState>,
     renderer: Option<Box<dyn WPRendererImpl>>,
     renderer_initialized: bool,
 }
@@ -19,8 +19,8 @@ pub struct WPRenderer {
 impl WPRenderer {
     pub fn new(connection: Rc<Connection>, egl_state: Rc<EGLState>) -> Self {
         Self {
-            connection,
-            egl_state,
+            _connection: connection,
+            _egl_state: egl_state,
             renderer: None,
             renderer_initialized: false,
         }
@@ -32,16 +32,10 @@ impl WPRenderer {
         {
             match wallpaper {
                 Wallpaper::Video { .. } => {
-                    self.renderer = Some(Box::new(VideoWPRenderer::new(
-                        self.connection.clone(),
-                        self.egl_state.clone(),
-                    )));
+                    self.renderer = Some(Box::new(VideoWPRenderer::new()));
                 }
                 Wallpaper::Scene { .. } => {
-                    self.renderer = Some(Box::new(SceneWPRenderer::new(
-                        self.connection.clone(),
-                        self.egl_state.clone(),
-                    )));
+                    self.renderer = Some(Box::new(SceneWPRenderer::new()));
                 }
                 Wallpaper::Web { .. } => {}
                 Wallpaper::Preset { .. } => {}

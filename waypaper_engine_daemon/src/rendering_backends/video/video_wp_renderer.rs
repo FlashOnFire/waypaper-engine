@@ -27,9 +27,6 @@ use crate::rendering_backends::video::video_backend_consts::{
 };
 
 pub struct VideoWPRenderer {
-    _connection: Rc<Connection>,
-    _egl_state: Rc<EGLState>,
-
     render_context: Option<RenderContext>,
 
     video_path: Option<PathBuf>,
@@ -60,10 +57,8 @@ struct RenderData {
 }
 
 impl VideoWPRenderer {
-    pub(crate) fn new(connection: Rc<Connection>, egl_state: Rc<EGLState>) -> Self {
+    pub(crate) fn new() -> Self {
         Self {
-            _connection: connection,
-            _egl_state: egl_state,
             render_context: None,
             video_path: None,
             started_playback: false,

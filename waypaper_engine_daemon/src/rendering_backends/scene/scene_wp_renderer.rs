@@ -1,23 +1,16 @@
-use crate::egl::EGLState;
 use crate::rendering_backends::scene::scene_structs::{Material, Model, ObjectValue, Scene};
 use crate::tex_file::TexFile;
 use crate::wallpaper::Wallpaper;
 use crate::wallpaper_renderer::WPRendererImpl;
-use smithay_client_toolkit::reexports::client::Connection;
-use std::rc::Rc;
 use waypaper_engine_shared::project::WallpaperType;
 
 pub(crate) struct SceneWPRenderer {
-    _connection: Rc<Connection>,
-    _egl_state: Rc<EGLState>,
     render_context: Option<RenderContext>,
 }
 
 impl SceneWPRenderer {
-    pub(crate) fn new(connection: Rc<Connection>, egl_state: Rc<EGLState>) -> Self {
+    pub(crate) fn new() -> Self {
         Self {
-            _connection: connection,
-            _egl_state: egl_state,
             render_context: None,
         }
     }
