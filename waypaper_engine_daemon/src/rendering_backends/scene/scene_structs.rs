@@ -63,21 +63,21 @@ pub struct OrthogonalProjection {
 #[serde(tag = "type", rename_all = "camelCase")]
 pub struct Object {
     #[serde(deserialize_with = "as_vec3f32")]
-    angles: Vector3<f32>,
+    pub angles: Vector3<f32>,
     #[serde(deserialize_with = "as_vec3f32")]
-    origin: Vector3<f32>,
+    pub origin: Vector3<f32>,
     #[serde(deserialize_with = "as_vec3f32")]
-    scale: Vector3<f32>,
+    pub scale: Vector3<f32>,
 
-    name: String,
+    pub name: String,
 
     #[serde(alias = "parallaxDepth", deserialize_with = "as_vec2f32")]
-    parallax_depth: Vector2<f32>,
+    pub parallax_depth: Vector2<f32>,
 
-    id: u32,
+    pub id: u32,
 
     #[serde(flatten)]
-    value: ObjectValue,
+    pub value: ObjectValue,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -110,4 +110,26 @@ pub enum ObjectValue {
         #[serde(alias = "instanceoverride")]
         instance_override: HashMap<String, Value>,
     },
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct Model {
+    pub autosize: bool,
+    pub(crate) material: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct Material {
+    pub passes: Vec<Passes>
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct Passes {
+    pub blending: String,
+    pub combos: HashMap<String, serde_json::Value>,
+    pub cullmode: String,
+    pub depthtest: String,
+    pub depthwrite: String,
+    pub shader: String,
+    pub textures: Vec<String>,
 }

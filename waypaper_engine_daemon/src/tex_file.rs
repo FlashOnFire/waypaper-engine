@@ -208,10 +208,13 @@ pub struct TexFile {
 }
 
 impl TexFile {
-    pub fn new(path: &Path) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn from_path(path: &Path) -> Result<Self, Box<dyn std::error::Error>> {
         tracing::debug!("Unpacking Tex File !");
-
-        let mut data: Cursor<Vec<u8>> = Cursor::new(fs::read(path)?);
+        let data: Vec<u8> = fs::read(path)?;
+        Self::from_bytes(data)
+    }
+    pub fn from_bytes(bytes: Vec<u8>) -> Result<Self, Box<dyn std::error::Error>> {
+        let mut data = Cursor::new(bytes);
         let data_length = data.get_ref().len();
         tracing::debug!("Data Length : {data_length}");
 
