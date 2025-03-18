@@ -34,8 +34,8 @@ use crate::wallpaper::Wallpaper;
 use crate::wallpaper_renderer::WPRenderer;
 
 pub struct RenderingContext {
-    pub(crate) connection: Rc<Connection>,
-    pub(crate) egl_state: Rc<EGLState>,
+    _connection: Rc<Connection>,
+    _egl_state: Rc<EGLState>,
     event_queue: EventQueue<WLState>,
     wl_state: WLState,
 }
@@ -58,8 +58,8 @@ impl RenderingContext {
         tracing::info!("Created WL state");
 
         Self {
-            connection,
-            egl_state,
+            _connection: connection,
+            _egl_state: egl_state,
             event_queue,
             wl_state,
         }
@@ -310,19 +310,19 @@ impl CompositorHandler for WLState {
 
     fn surface_enter(
         &mut self,
-        conn: &Connection,
-        qh: &QueueHandle<Self>,
-        surface: &WlSurface,
-        output: &WlOutput,
+        _conn: &Connection,
+        _qh: &QueueHandle<Self>,
+        _surface: &WlSurface,
+        _output: &WlOutput,
     ) {
     }
 
     fn surface_leave(
         &mut self,
-        conn: &Connection,
-        qh: &QueueHandle<Self>,
-        surface: &WlSurface,
-        output: &WlOutput,
+        _conn: &Connection,
+        _qh: &QueueHandle<Self>,
+        _surface: &WlSurface,
+        _output: &WlOutput,
     ) {
     }
 }

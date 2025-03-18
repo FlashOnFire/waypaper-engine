@@ -55,7 +55,7 @@ impl ScenePackage {
 
         let header_offset = data.position();
         for entry in &files {
-            if (tracing::enabled!(Level::DEBUG)) {
+            if tracing::enabled!(Level::DEBUG) {
                 let formatted_size = if entry.size > 100000000 {
                     format!("{} Mb ", entry.size % 100000000).to_string()
                 } else if entry.size > 1000 {
@@ -104,7 +104,7 @@ fn read_header(data: &mut Cursor<Vec<u8>>) -> u32 {
     let version = read_str(data);
     assert!(version.starts_with("PKGV"), "Error reading PKG file header: {}", version);
     
-    if (version != "PKGV0001") {
+    if version != "PKGV0001" {
         tracing::warn!("Trying to unpack unsupported PKG file version: {}, if you encounter bugs please report them on the git repository", version);
     }
 
