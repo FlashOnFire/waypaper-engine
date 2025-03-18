@@ -1,9 +1,9 @@
 use crate::rendering_backends::scene::scene_structs::{Material, Model, ObjectValue, Scene};
+use crate::scene_package::ScenePackage;
 use crate::tex_file::TexFile;
 use crate::wallpaper::Wallpaper;
 use crate::wallpaper_renderer::{SceneRenderingBackend, WPRendererImpl};
 use waypaper_engine_shared::project::WallpaperType;
-use crate::scene_package::ScenePackage;
 
 pub(crate) struct SceneWPRenderer {
     render_context: Option<RenderContext>,
@@ -59,14 +59,13 @@ impl SceneRenderingBackend for SceneWPRenderer {
         if let ObjectValue::Image { image, .. } = &image.value {
             tracing::info!("Found model : {}", image);
             let model: Model =
-                serde_json::from_slice(scene_package.contents.get(image).unwrap().bytes())
-                    .unwrap();
+                serde_json::from_slice(scene_package.contents.get(image).unwrap().bytes()).unwrap();
 
             tracing::info!("Found material : {}", model.material);
             let material: Material = serde_json::from_slice(
                 scene_package.contents.get(&model.material).unwrap().bytes(),
             )
-                .unwrap();
+            .unwrap();
 
             let first_pass = material.passes.first().unwrap();
             let first_texture = first_pass.textures.first().unwrap();
@@ -77,7 +76,7 @@ impl SceneRenderingBackend for SceneWPRenderer {
                     .unwrap()
                     .bytes(),
             ))
-                .unwrap();
+            .unwrap();
             tracing::debug!("{:?}", scene);
             self.render_context = Some(RenderContext { scene, texture });
         }

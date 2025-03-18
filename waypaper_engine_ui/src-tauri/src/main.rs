@@ -1,4 +1,3 @@
-use std::error::Error;
 use std::fs;
 use std::fs::File;
 use std::io::Read;
@@ -6,14 +5,15 @@ use std::ops::Deref;
 use std::path::Path;
 use std::sync::Mutex;
 
-use base64::{Engine as _, engine::general_purpose::STANDARD};
+use anyhow::Error;
+use base64::{engine::general_purpose::STANDARD, Engine as _};
 use linux_ipc::IpcChannel;
 use serde::Serialize;
 use tauri::{Emitter, State, Window};
 use xrandr_parser::Parser;
 
 use waypaper_engine_shared::ipc::IPCRequest;
-use waypaper_engine_shared::project::{WallpaperType, WEProject};
+use waypaper_engine_shared::project::{WEProject, WallpaperType};
 
 #[tauri::command]
 fn stop_daemon(channel: State<Mutex<IpcChannel>>) {
@@ -91,19 +91,25 @@ fn loaded(
     let mut wallpaper_infos = wallpaper_infos.lock().unwrap();
     wallpapers
         .iter()
-        .map(|project| {
+        .flat_map(|project| {
             let id = project.workshop_id.unwrap();
 
             let preview_path = wpe_dir.join(id.to_string()).join(&project.preview);
 
-            let b64 = to_base64(&preview_path);
+            match to_base64(&preview_path) {
+                Ok(b64) => {
+                    let title = project.title.clone();
 
-            let title = project.title.clone();
-
-            WPInfo {
-                id,
-                title,
-                preview_b64: b64,
+                    Some(WPInfo {
+                        id,
+                        title,
+                        preview_b64: b64,
+                    })
+                },
+                Err(e) => {
+                    eprintln!("Failed to convert preview to base64 for file {:?} (wallpaper: {}): {}", preview_path, project.title, e);
+                    None
+                }
             }
         })
         .for_each(|wp| wallpaper_infos.push(wp));
@@ -111,10 +117,11 @@ fn loaded(
     window.emit("setWPs", wallpaper_infos.deref()).unwrap();
 }
 
-fn main() -> Result<(), Box<dyn Error>> {
+fn main() -> Result<(), Error> {
     let wallpapers: Mutex<Vec<WEProject>> = Mutex::new(vec![]);
     let wallpaper_infos: Mutex<Vec<WPInfo>> = Mutex::new(vec![]);
-    let channel = Mutex::new(IpcChannel::connect("/tmp/waypaper-engine.sock").unwrap());
+
+    let channel = Mutex::new(IpcChannel::connect("/tmp/waypaper-engine.sock").expect("Failed to connect to daemon"));
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
@@ -135,8 +142,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-pub fn to_base64(path: &Path) -> String {
-    let mut file_type: String = path.extension().unwrap().to_str().unwrap().to_owned();
+pub fn to_base64(path: &Path) -> Result<String, anyhow::Error> {
+    let mut file_type: String = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_owned();
 
     if file_type == "jpg" {
         "jpeg".clone_into(&mut file_type);
@@ -144,14 +151,14 @@ pub fn to_base64(path: &Path) -> String {
 
     assert!(file_type == "jpeg" || file_type == "gif" || file_type == "png");
 
-    let mut file = File::open(path).unwrap();
+    let mut file = File::open(path)?;
     let mut vector = vec![];
     let _ = file.read_to_end(&mut vector);
     let base64 = STANDARD.encode(vector);
 
-    format!(
+    Ok(format!(
         "data:image/{};base64,{}",
         file_type,
         base64.replace("\r\n", "")
-    )
+    ))
 }

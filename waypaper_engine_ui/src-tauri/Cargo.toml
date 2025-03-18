@@ -14,10 +14,9 @@ tauri = { version = "2", features = [] }
 tauri-plugin-shell = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-serde_utils = "0.6.2"
-serde-this-or-that = "0.4.2"
 base64 = "0.22.1"
 linux-ipc = "0.2.1"
 xrandr-parser = "0.3.0"
+anyhow = "1.0"
 
 waypaper_engine_shared = {path = "../../waypaper_engine_shared"}

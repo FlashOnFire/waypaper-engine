@@ -3,10 +3,8 @@ use std::fs::File;
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
-use serde_this_or_that::{as_bool, as_f64, as_i64};
+use serde_this_or_that::{as_bool, as_f64, as_i64, as_opt_string, as_opt_u64};
 
-use crate::serde_utils::as_str_opt;
-use crate::serde_utils::as_u64_opt;
 use crate::serde_utils::as_wp_type;
 use crate::serde_utils::from_map_str_color;
 
@@ -42,7 +40,7 @@ pub struct WEProject {
     #[serde(default)]
     pub official: bool,
 
-    #[serde(deserialize_with = "as_u64_opt")]
+    #[serde(deserialize_with = "as_opt_u64")]
     #[serde(default)]
     #[serde(rename = "workshopid")]
     pub workshop_id: Option<u64>,
@@ -116,7 +114,7 @@ pub enum PropertyValue {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ComboOption {
-    #[serde(deserialize_with = "as_str_opt")]
+    #[serde(deserialize_with = "as_opt_string")]
     value: Option<String>,
     label: String,
 }
@@ -165,11 +163,11 @@ impl WEProject {
     pub fn new(path: &Path, id: u64) -> Self {
         let project_file = File::open(path).unwrap();
         let mut proj: WEProject = serde_json::from_reader(project_file).unwrap();
-        
+
         if proj.workshop_id.is_none() {
             proj.workshop_id = Some(id);
         }
-        
+
         proj
     }
 }

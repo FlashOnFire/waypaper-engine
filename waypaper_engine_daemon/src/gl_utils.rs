@@ -4,9 +4,8 @@ use std::str::from_utf8;
 use gl::types::{GLchar, GLenum, GLint, GLuint};
 
 pub(crate) fn compile_shader(src: &str, shader_type: GLenum) -> GLuint {
-    let mut shader = 0;
     unsafe {
-        shader = gl::CreateShader(shader_type);
+        let shader = gl::CreateShader(shader_type);
 
         let c_str = CString::new(src.as_bytes()).unwrap();
         gl::ShaderSource(shader, 1, &c_str.as_ptr(), ptr::null());
@@ -27,8 +26,8 @@ pub(crate) fn compile_shader(src: &str, shader_type: GLenum) -> GLuint {
             );
             panic!("{}", from_utf8(&buf).expect("ShaderInfoLog not valid utf8"));
         }
+        shader
     }
-    shader
 }
 
 pub(crate) fn link_program(vs: GLuint, fs: GLuint) -> GLuint {
