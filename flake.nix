@@ -26,6 +26,7 @@
         packages = {
           daemon = pkgs.callPackage ./packaging/nix/daemon.nix {inherit self;};
           ui = pkgs.callPackage ./packaging/nix/ui.nix {inherit self;};
+          cli = pkgs.callPackage ./packaging/nix/cli.nix {inherit self;};
         };
 
         devShells.default = pkgs.mkShell {

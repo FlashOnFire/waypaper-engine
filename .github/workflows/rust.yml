@@ -24,3 +24,4 @@ jobs:
         run: |
           nix build -L .#ui
           nix build -L .#daemon
+          nix build -L .#cli
