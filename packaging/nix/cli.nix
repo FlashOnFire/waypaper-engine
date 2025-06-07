@@ -23,9 +23,6 @@ in
       mold-wrapped
     ];
 
-    buildInputs = [
-    ];
-
     env.RUSTFLAGS = "-C link-arg=-fuse-ld=mold";
 
     postPatch = ''
