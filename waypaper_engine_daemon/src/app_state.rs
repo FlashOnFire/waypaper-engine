@@ -43,7 +43,7 @@ impl AppState {
                     Ok((response, reply)) => {
                         tracing::debug!("Received msg : [{:?}]", response);
                         tx.send(response.clone()).unwrap();
-                        if let IPCRequest::StopDaemon = response {
+                        if let IPCRequest::KillDaemon = response {
                             break;
                         }
                     }
@@ -57,7 +57,7 @@ impl AppState {
 
             match rx.try_recv() {
                 Ok(req) => match req {
-                    IPCRequest::SetWP { id, screen } => {
+                    IPCRequest::SetWallpaper { id, screen } => {
                         let outputs = self.rendering_context.get_outputs();
                         if let Some(output) = outputs
                             .iter()
@@ -95,7 +95,7 @@ impl AppState {
                             tracing::warn!("Received wrong output in SetWallpaper request: [{}]", screen);
                         }
                     }
-                    IPCRequest::StopDaemon => {
+                    IPCRequest::KillDaemon => {
                         break;
                     }
                 },

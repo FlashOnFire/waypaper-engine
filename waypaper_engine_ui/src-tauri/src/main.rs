@@ -20,7 +20,7 @@ fn stop_daemon(channel: State<Mutex<IpcChannel>>) {
     channel
         .lock()
         .unwrap()
-        .send::<_, IPCRequest>(IPCRequest::StopDaemon)
+        .send::<_, IPCRequest>(IPCRequest::KillDaemon)
         .expect("Failed to communicate with daemon");
 }
 
@@ -36,7 +36,7 @@ fn set_wp(wp_id: u64, screen: String, channel: State<Mutex<IpcChannel>>) {
     let response = channel
         .lock()
         .unwrap()
-        .send::<_, IPCRequest>(IPCRequest::SetWP { id: wp_id, screen })
+        .send::<_, IPCRequest>(IPCRequest::SetWallpaper { id: wp_id, screen })
         .expect("Failed to communicate with daemon");
 
     if let Some(response) = response {

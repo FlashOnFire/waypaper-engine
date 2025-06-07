@@ -1,0 +1,13 @@
+[package]
+name = "waypaper_engine_cli"
+version = "0.1.0"
+authors = ["FlashOnFire"]
+edition = "2024"
+
+[dependencies]
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["json"] }
+clap = { version = "4.5", features = ["derive"] }
+clap-verbosity-flag = { version = "3.0.3", features = ["tracing"] }
+linux-ipc = "0.2.1"
+waypaper_engine_shared = { path = "../waypaper_engine_shared" }
