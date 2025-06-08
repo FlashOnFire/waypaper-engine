@@ -5317,8 +5317,10 @@ dependencies = [
 name = "waypaper_engine_daemon"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "bitflags 2.9.1",
  "cgmath",
+ "ffmpeg-next",
  "fps_counter",
  "gl",
  "image",
