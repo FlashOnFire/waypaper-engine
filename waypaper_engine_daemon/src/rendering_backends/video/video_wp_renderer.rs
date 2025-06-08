@@ -1,4 +1,5 @@
 use std::cell::OnceCell;
+use std::cmp::Reverse;
 use std::collections::{BinaryHeap};
 use std::ffi::{c_void, CString};
 use std::path::PathBuf;
@@ -44,7 +45,7 @@ struct RenderData {
     last_frame: Frame,
 
     decoding_thread_handle: OnceCell<JoinHandle<()>>,
-    frames: Arc<Mutex<BinaryHeap<TimedFrame>>>, // Using BinaryHeap to keep frames in order of their timestamps
+    frames: Arc<Mutex<BinaryHeap<Reverse<TimedFrame>>>>, // Using BinaryHeap to keep frames in order of their timestamps
 
     shutdown: Arc<AtomicBool>,
 }
@@ -92,7 +93,7 @@ impl VideoWPRenderer {
                 null(),
             );
 
-            let last_frame = frames_vec.lock().unwrap().peek().unwrap().frame.clone();
+            let last_frame = frames_vec.lock().unwrap().peek().unwrap().0.frame.clone();
 
             ctx.data.replace(RenderData {
                 texture,
@@ -132,8 +133,8 @@ impl PartialEq for TimedFrame {
 impl Eq for TimedFrame {}
 impl Ord for TimedFrame {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        match other.rewind_count.cmp(&self.rewind_count) {
-            std::cmp::Ordering::Equal => other.time.as_secs_f64().total_cmp(&self.time.as_secs_f64()),
+        match self.rewind_count.cmp(&other.rewind_count) {
+            std::cmp::Ordering::Equal => self.time.as_secs_f64().total_cmp(&other.time.as_secs_f64()),
             ordering => ordering,
         }
     }
@@ -154,14 +155,14 @@ impl From<TimedFrame> for Frame {
 fn start_decoding_thread(
     mut decoder: Decoder,
     shutdown: Arc<AtomicBool>,
-) -> (JoinHandle<()>, Arc<Mutex<BinaryHeap<TimedFrame>>>) {
+) -> (JoinHandle<()>, Arc<Mutex<BinaryHeap<Reverse<TimedFrame>>>>) {
     let mut frames_vec = BinaryHeap::with_capacity(THREAD_FRAME_BUFFER_SIZE);
     let first_frame = decoder.decode().unwrap();
-    frames_vec.push(TimedFrame {
+    frames_vec.push(Reverse(TimedFrame {
         rewind_count: 0,
         time: first_frame.0,
         frame: first_frame.1,
-    });
+    }));
     let frames_arc = Arc::new(Mutex::new(frames_vec)); // init with first frame
 
     let weak = Arc::downgrade(&frames_arc);
@@ -189,14 +190,17 @@ fn start_decoding_thread(
                 },
             };
 
+            let pts = packet.pts();
+            let stream_time_base = reader.input.stream(stream_index).unwrap().time_base();
+
             let timed_frame: TimedFrame = match decoder_split
                 .decode(packet)
                 .expect("Failed to decode video frame")
             {
-                Some(v) => TimedFrame {
+                Some((_, frame)) => TimedFrame {
                     rewind_count,
-                    time: v.0,
-                    frame: v.1,
+                    time: Time::new(pts.into_value(), stream_time_base),
+                    frame,
                 },
                 None => continue,
             };
@@ -217,7 +221,7 @@ fn start_decoding_thread(
 
             if let Some(strong) = weak.upgrade() {
                 let mut frames_vec = strong.lock().unwrap();
-                frames_vec.push(timed_frame);
+                frames_vec.push(Reverse(timed_frame));
             } else {
                 break 'outer;
             }
@@ -326,7 +330,7 @@ impl WPRendererImpl for VideoWPRenderer {
         let frame = if Instant::now()
             .duration_since(data.last_frame_time)
             .as_secs_f32()
-            < 1.0 / data.framerate
+            < 1.0 / (data.framerate/10.0)
         {
             tracing::debug!("Not enough time since last frame, rendering last frame again");
             &data.last_frame
@@ -335,30 +339,21 @@ impl WPRendererImpl for VideoWPRenderer {
 
             let mut frames = data.frames.lock().unwrap();
 
-            match frames.pop() {
-                Some(TimedFrame {
-                    rewind_count,
-                    time,
-                    frame,
-                }) if frames.len() > 16 => {
-                    data.decoding_thread_handle.get().unwrap().thread().unpark();
-                    tracing::info!(
+            if frames.is_empty() || frames.len() < 16 {
+                tracing::debug!("Not enough frames in queue, rendering last frame");
+                &data.last_frame
+            } else {
+                let Reverse(TimedFrame { rewind_count, time, frame }) = frames.pop().unwrap();
+                data.decoding_thread_handle.get().unwrap().thread().unpark();
+
+                tracing::info!(
                         "Rendering new frame, frames in queue: {}, rewind count: {}, frame time: {}",
                         frames.len(),
                         rewind_count,
                         time.as_secs_f64()
                     );
-                    data.last_frame = frame;
-                    &data.last_frame
-                }
-                Some(_) => {
-                    tracing::debug!("Not enough frames in queue, rendering last frame");
-                    &data.last_frame
-                }
-                None => {
-                    tracing::debug!("No frame to render in queue! Rendering last frame");
-                    &data.last_frame
-                }
+                data.last_frame = frame;
+                &data.last_frame
             }
         };
 
