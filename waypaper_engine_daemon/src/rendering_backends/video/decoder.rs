@@ -38,7 +38,7 @@ impl VideoDecoder {
         loop {
             let mut decoded = Video::empty();
             loop {
-                if (self.decoder.receive_frame(&mut decoded).is_err()) {
+                if self.decoder.receive_frame(&mut decoded).is_err() {
                     break;
                 }
             }

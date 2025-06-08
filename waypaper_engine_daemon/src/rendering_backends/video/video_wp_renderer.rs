@@ -1,6 +1,6 @@
 use std::cell::OnceCell;
 use std::cmp::Reverse;
-use std::collections::{BinaryHeap};
+use std::collections::BinaryHeap;
 use std::ffi::{c_void, CString};
 use std::path::PathBuf;
 use std::ptr::null;
@@ -10,15 +10,17 @@ use std::thread;
 use std::thread::JoinHandle;
 use std::time::Instant;
 
-use crate::gl_utils::{compile_shader, link_program};
-use crate::wallpaper_renderer::{VideoRenderingBackend, WPRendererImpl};
-use gl::types::{GLfloat, GLint, GLsizei, GLsizeiptr, GLuint};
-use video_rs::hwaccel::HardwareAccelerationDeviceType;
-use video_rs::{Decoder, DecoderBuilder, Error, Frame, Time};
-
+use crate::rendering_backends::video::frames::OrderedFramesContainer;
+use crate::rendering_backends::video::gl::{
+    ElementBuffer, GLDataType, Shader, VertexArray, VertexAttribute, VertexBuffer,
+};
 use crate::rendering_backends::video::video_backend_consts::{
     FRAGMENT_SHADER_SRC, INDICES, THREAD_FRAME_BUFFER_SIZE, VERTEX_DATA, VERTEX_SHADER_SRC,
 };
+use crate::wallpaper_renderer::{VideoRenderingBackend, WPRendererImpl};
+use gl::types::{GLfloat, GLint, GLsizei, GLuint};
+use video_rs::hwaccel::HardwareAccelerationDeviceType;
+use video_rs::{Decoder, DecoderBuilder, Error, Frame, Time};
 
 pub struct VideoWPRenderer {
     render_context: Option<RenderContext>,
@@ -28,10 +30,8 @@ pub struct VideoWPRenderer {
 }
 
 struct RenderContext {
-    vbo: GLuint,
-    program: GLuint,
-    vao: GLuint,
-    ebo: GLuint,
+    shader: Shader,
+    vao: VertexArray,
     data: Option<RenderData>,
 }
 
@@ -45,7 +45,7 @@ struct RenderData {
     last_frame: Frame,
 
     decoding_thread_handle: OnceCell<JoinHandle<()>>,
-    frames: Arc<Mutex<BinaryHeap<Reverse<TimedFrame>>>>, // Using BinaryHeap to keep frames in order of their timestamps
+    frames: Arc<Mutex<OrderedFramesContainer<TimedFrame>>>, // Using BinaryHeap to keep frames in order of their timestamps
 
     shutdown: Arc<AtomicBool>,
 }
@@ -93,7 +93,7 @@ impl VideoWPRenderer {
                 null(),
             );
 
-            let last_frame = frames_vec.lock().unwrap().peek().unwrap().0.frame.clone();
+            let last_frame = frames_vec.lock().unwrap().peek().unwrap().frame.clone();
 
             ctx.data.replace(RenderData {
                 texture,
@@ -134,7 +134,9 @@ impl Eq for TimedFrame {}
 impl Ord for TimedFrame {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         match self.rewind_count.cmp(&other.rewind_count) {
-            std::cmp::Ordering::Equal => self.time.as_secs_f64().total_cmp(&other.time.as_secs_f64()),
+            std::cmp::Ordering::Equal => {
+                self.time.as_secs_f64().total_cmp(&other.time.as_secs_f64())
+            }
             ordering => ordering,
         }
     }
@@ -155,14 +157,18 @@ impl From<TimedFrame> for Frame {
 fn start_decoding_thread(
     mut decoder: Decoder,
     shutdown: Arc<AtomicBool>,
-) -> (JoinHandle<()>, Arc<Mutex<BinaryHeap<Reverse<TimedFrame>>>>) {
-    let mut frames_vec = BinaryHeap::with_capacity(THREAD_FRAME_BUFFER_SIZE);
+) -> (
+    JoinHandle<()>,
+    Arc<Mutex<OrderedFramesContainer<TimedFrame>>>,
+) {
+    let mut frames_vec: OrderedFramesContainer<TimedFrame> =
+        OrderedFramesContainer::with_capacity(THREAD_FRAME_BUFFER_SIZE);
     let first_frame = decoder.decode().unwrap();
-    frames_vec.push(Reverse(TimedFrame {
+    frames_vec.push(TimedFrame {
         rewind_count: 0,
         time: first_frame.0,
         frame: first_frame.1,
-    }));
+    });
     let frames_arc = Arc::new(Mutex::new(frames_vec)); // init with first frame
 
     let weak = Arc::downgrade(&frames_arc);
@@ -221,7 +227,7 @@ fn start_decoding_thread(
 
             if let Some(strong) = weak.upgrade() {
                 let mut frames_vec = strong.lock().unwrap();
-                frames_vec.push(Reverse(timed_frame));
+                frames_vec.push(timed_frame);
             } else {
                 break 'outer;
             }
@@ -240,82 +246,49 @@ fn start_decoding_thread(
 
 impl WPRendererImpl for VideoWPRenderer {
     fn init_render(&mut self) {
-        unsafe {
-            let mut vao: GLuint = 0;
-            gl::GenVertexArrays(1, &mut vao);
-            gl::BindVertexArray(vao);
+        let ebo = ElementBuffer::new(&INDICES);
+        let mut vao = VertexArray::new(ebo);
+        let mut vbo = VertexBuffer::new(&VERTEX_DATA);
 
-            let mut vbo: GLuint = 0;
-            gl::GenBuffers(1, &mut vbo);
+        vbo.add_vertex_attribute(VertexAttribute {
+            index: 0,
+            size: 3,
+            data_type: GLDataType::Float,
+            normalized: false,
+            stride: (8 * size_of::<GLfloat>()) as GLint,
+            offset: 0,
+        });
 
-            gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
-            gl::BufferData(
-                gl::ARRAY_BUFFER,
-                (VERTEX_DATA.len() * size_of::<GLfloat>()) as GLsizeiptr,
-                &VERTEX_DATA[0] as *const f32 as *const c_void,
-                gl::STATIC_DRAW,
-            );
+        vbo.add_vertex_attribute(VertexAttribute {
+            index: 1,
+            size: 3,
+            data_type: GLDataType::Float,
+            normalized: false,
+            stride: (8 * size_of::<GLfloat>()) as GLint,
+            offset: 3 * size_of::<GLfloat>(),
+        });
 
-            let vertex_shader: GLuint = compile_shader(VERTEX_SHADER_SRC, gl::VERTEX_SHADER);
-            let fragment_shader = compile_shader(FRAGMENT_SHADER_SRC, gl::FRAGMENT_SHADER);
+        vbo.add_vertex_attribute(VertexAttribute {
+            index: 2,
+            size: 2,
+            data_type: GLDataType::Float,
+            normalized: false,
+            stride: (8 * size_of::<GLfloat>()) as GLint,
+            offset: 6 * size_of::<GLfloat>(),
+        });
 
-            let program = link_program(vertex_shader, fragment_shader);
+        vao.bind();
+        vao.bind_vertex_buffer(vbo);
+        vao.unbind();
 
-            let pointer = CString::new("out_color").unwrap();
-            gl::BindFragDataLocation(program, 0, pointer.as_ptr());
+        let shader = Shader::new(VERTEX_SHADER_SRC, FRAGMENT_SHADER_SRC);
 
-            gl::DeleteShader(vertex_shader);
-            gl::DeleteShader(fragment_shader);
-
-            gl::VertexAttribPointer(
-                0,
-                3,
-                gl::FLOAT,
-                gl::FALSE,
-                (8 * size_of::<GLfloat>()) as GLsizei,
-                null(),
-            );
-            gl::EnableVertexAttribArray(0);
-
-            gl::VertexAttribPointer(
-                1,
-                3,
-                gl::FLOAT,
-                gl::FALSE,
-                (8 * size_of::<GLfloat>()) as GLsizei,
-                (3 * size_of::<GLfloat>()) as *const c_void,
-            );
-            gl::EnableVertexAttribArray(1);
-
-            gl::VertexAttribPointer(
-                2,
-                2,
-                gl::FLOAT,
-                gl::FALSE,
-                (8 * size_of::<GLfloat>()) as GLsizei,
-                (6 * size_of::<GLfloat>()) as *const c_void,
-            );
-            gl::EnableVertexAttribArray(2);
-
-            let mut ebo: GLuint = 0;
-            gl::GenBuffers(1, &mut ebo);
-
-            gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, ebo);
-            gl::BufferData(
-                gl::ELEMENT_ARRAY_BUFFER,
-                (INDICES.len() * size_of::<GLfloat>()) as GLsizeiptr,
-                &INDICES[0] as *const i32 as *const c_void,
-                gl::STATIC_DRAW,
-            );
-
-            self.render_context = Some(RenderContext {
-                program,
-                vao,
-                vbo,
-                ebo,
-                data: None,
-            })
-        }
+        shader.bind_frag_data_location(0, "out_color");
+        self.render_context = Some(RenderContext {
+            shader,
+            vao,
+            data: None,
+        })
     }
 
     fn render(&mut self, width: u32, height: u32) {
@@ -330,7 +303,7 @@ impl WPRendererImpl for VideoWPRenderer {
         let frame = if Instant::now()
             .duration_since(data.last_frame_time)
             .as_secs_f32()
-            < 1.0 / (data.framerate/10.0)
+            < 1.0 / data.framerate
         {
             tracing::debug!("Not enough time since last frame, rendering last frame again");
             &data.last_frame
@@ -343,15 +316,19 @@ impl WPRendererImpl for VideoWPRenderer {
                 tracing::debug!("Not enough frames in queue, rendering last frame");
                 &data.last_frame
             } else {
-                let Reverse(TimedFrame { rewind_count, time, frame }) = frames.pop().unwrap();
+                let TimedFrame {
+                    rewind_count,
+                    time,
+                    frame,
+                } = frames.pop().unwrap();
                 data.decoding_thread_handle.get().unwrap().thread().unpark();
 
                 tracing::info!(
-                        "Rendering new frame, frames in queue: {}, rewind count: {}, frame time: {}",
-                        frames.len(),
-                        rewind_count,
-                        time.as_secs_f64()
-                    );
+                    "Rendering new frame, frames in queue: {}, rewind count: {}, frame time: {}",
+                    frames.len(),
+                    rewind_count,
+                    time.as_secs_f64()
+                );
                 data.last_frame = frame;
                 &data.last_frame
             }
@@ -361,9 +338,8 @@ impl WPRendererImpl for VideoWPRenderer {
             // Reset viewport each frame to avoid problems when rendering on two screens with different resolutions
             gl::Viewport(0, 0, width as GLsizei, height as GLsizei);
 
-            gl::BindVertexArray(ctx.vao);
-            gl::UseProgram(ctx.program);
-            gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, ctx.ebo);
+            ctx.shader.use_program();
+            ctx.vao.bind();
 
             gl::BindTexture(gl::TEXTURE_2D, data.texture);
             gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::REPEAT as GLint);
@@ -386,21 +362,8 @@ impl WPRendererImpl for VideoWPRenderer {
 
             gl::DrawElements(gl::TRIANGLES, 6, gl::UNSIGNED_INT, null::<c_void>());
 
-            gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, 0);
-            gl::UseProgram(0);
-            gl::BindVertexArray(0);
-        }
-    }
-}
-
-impl Drop for RenderContext {
-    fn drop(&mut self) {
-        unsafe {
-            tracing::debug!("Destroying video render context");
-            gl::DeleteBuffers(1, &self.ebo);
-            gl::DeleteBuffers(1, &self.vbo);
-            gl::DeleteVertexArrays(1, &self.vao);
-            gl::DeleteProgram(self.program);
+            ctx.vao.unbind();
+            ctx.shader.unbind();
         }
     }
 }
