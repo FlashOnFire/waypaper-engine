@@ -271,8 +271,7 @@ impl WPRendererImpl for VideoWPRenderer {
         vao.unbind();
 
         let shader = Shader::new(VERTEX_SHADER_SRC, FRAGMENT_SHADER_SRC);
-
-        shader.bind_frag_data_location(0, "out_color");
+        
         self.render_context = Some(RenderContext {
             shader,
             vao,

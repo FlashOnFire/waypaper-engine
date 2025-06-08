@@ -287,13 +287,6 @@ impl Shader {
             gl::UseProgram(0);
         }
     }
-
-    pub fn bind_frag_data_location(&self, index: u32, name: &str) {
-        let c_str = CString::new(name).unwrap();
-        unsafe {
-            gl::BindFragDataLocation(self.id, index, c_str.as_ptr());
-        }
-    }
 }
 
 impl Drop for Shader {
