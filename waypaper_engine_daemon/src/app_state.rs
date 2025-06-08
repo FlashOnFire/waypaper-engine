@@ -160,13 +160,13 @@ impl AppState {
                             response.send(IPCResponse::Outputs(outputs)).unwrap();
                         }
                         IPCRequest::KillDaemon => {
-                            break;
+                            unreachable!() 
                         }
                     }
                 }
                 Err(err) => match err {
                     TryRecvError::Empty => {}
-                    TryRecvError::Disconnected => panic!(),
+                    TryRecvError::Disconnected => break, // Daemon stopped
                 },
             }
         }
