@@ -1,7 +1,5 @@
 use std::cell::OnceCell;
-use std::cmp::Reverse;
-use std::collections::BinaryHeap;
-use std::ffi::{c_void, CString};
+use std::ffi::{c_void};
 use std::path::PathBuf;
 use std::ptr::null;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -255,26 +253,17 @@ impl WPRendererImpl for VideoWPRenderer {
             size: 3,
             data_type: GLDataType::Float,
             normalized: false,
-            stride: (8 * size_of::<GLfloat>()) as GLint,
+            stride: (5 * size_of::<GLfloat>()) as GLint,
             offset: 0,
         });
 
         vbo.add_vertex_attribute(VertexAttribute {
             index: 1,
-            size: 3,
-            data_type: GLDataType::Float,
-            normalized: false,
-            stride: (8 * size_of::<GLfloat>()) as GLint,
-            offset: 3 * size_of::<GLfloat>(),
-        });
-
-        vbo.add_vertex_attribute(VertexAttribute {
-            index: 2,
             size: 2,
             data_type: GLDataType::Float,
             normalized: false,
-            stride: (8 * size_of::<GLfloat>()) as GLint,
-            offset: 6 * size_of::<GLfloat>(),
+            stride: (5 * size_of::<GLfloat>()) as GLint,
+            offset: 3 * size_of::<GLfloat>(),
         });
 
         vao.bind();
