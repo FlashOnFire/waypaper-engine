@@ -1,5 +1,5 @@
 use std::cell::OnceCell;
-use std::ffi::{c_void};
+use std::ffi::c_void;
 use std::path::PathBuf;
 use std::ptr::null;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -7,7 +7,7 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::thread::JoinHandle;
 use std::time::Instant;
-
+use crate::rendering_backends::video::demuxer::{Demuxer, TimedPacket};
 use crate::rendering_backends::video::frames::OrderedFramesContainer;
 use crate::rendering_backends::video::gl::{
     ElementBuffer, GLDataType, Shader, VertexArray, VertexAttribute, VertexBuffer,
@@ -171,7 +171,10 @@ fn start_decoding_thread(
 
     let weak = Arc::downgrade(&frames_arc);
 
-    let (mut decoder_split, mut reader, stream_index) = decoder.into_parts();
+    let (mut decoder_split, reader, _) = decoder.into_parts();
+
+    let mut demuxer =
+        Demuxer::new(reader.source.as_path(), false).expect("Failed to create demuxer");
 
     let handle = thread::spawn(move || {
         tracing::debug!("Spawn decoding thread");
@@ -179,31 +182,32 @@ fn start_decoding_thread(
         let mut rewind_count: u32 = 0;
 
         'outer: while !shutdown.load(Ordering::Relaxed) {
-            let packet_result = reader.read(stream_index);
+            let (packet, time) = loop {
+                let packet_result: Option<TimedPacket> = demuxer.read();
 
-            let packet = match packet_result {
-                Ok(packet) => packet,
-                Err(err) => match err {
-                    Error::ReadExhausted => {
+                match packet_result {
+                    Some(timed_packed) => match timed_packed {
+                        TimedPacket::Video(packet, time) => break (packet, time),
+                        _ => continue, // Skip non-video packets
+                    },
+                    None => {
                         tracing::debug!("Video ended, seeking to start");
-                        reader.seek_to_start().unwrap();
+                        demuxer.seek_to_start().unwrap();
                         rewind_count += 1;
                         continue;
                     }
-                    _ => panic!("Error while decoding video frame"),
-                },
+                };
             };
 
-            let pts = packet.pts();
-            let stream_time_base = reader.input.stream(stream_index).unwrap().time_base();
+            tracing::info!("Decoding packet with PTS: {}, time base: {:?}", packet.pts().unwrap(), packet.time_base());
 
             let timed_frame: TimedFrame = match decoder_split
-                .decode(packet)
+                .decode(video_rs::Packet::new(packet, time.into_parts().1))
                 .expect("Failed to decode video frame")
             {
-                Some((_, frame)) => TimedFrame {
+                Some((time, frame)) => TimedFrame {
                     rewind_count,
-                    time: Time::new(pts.into_value(), stream_time_base),
+                    time,
                     frame,
                 },
                 None => continue,
@@ -271,7 +275,7 @@ impl WPRendererImpl for VideoWPRenderer {
         vao.unbind();
 
         let shader = Shader::new(VERTEX_SHADER_SRC, FRAGMENT_SHADER_SRC);
-        
+
         self.render_context = Some(RenderContext {
             shader,
             vao,
