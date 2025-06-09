@@ -30,27 +30,35 @@ impl WPRenderer {
     }
 
     pub fn setup_wallpaper(&mut self, wallpaper: &Wallpaper) {
-        if self.renderer.is_none() || self.renderer.as_ref().unwrap().current_backend_type() != wallpaper.wp_type() {
-            match wallpaper {
-                Wallpaper::Video {
-                    ref project,
-                    base_dir_path,
-                } => {
+        match wallpaper {
+            Wallpaper::Video {
+                project,
+                base_dir_path,
+            } => {
+                if let Some(RenderingBackend::Video(video_renderer)) = &mut self.renderer {
+                    video_renderer
+                        .setup_video_wallpaper(base_dir_path.join(project.file.as_ref().unwrap()));
+                } else {
                     let mut renderer = Box::new(VideoWPRenderer::new());
                     renderer
                         .setup_video_wallpaper(base_dir_path.join(project.file.as_ref().unwrap()));
                     self.renderer = Some(RenderingBackend::Video(renderer));
                 }
-                Wallpaper::Scene { scene_package, .. } => {
+            }
+            Wallpaper::Scene {
+                project,
+                scene_package,
+            } => {
+                if let Some(RenderingBackend::Scene(scene_renderer)) = &mut self.renderer {
+                    scene_renderer.setup_scene_wallpaper(scene_package);
+                } else {
                     let mut renderer = Box::new(SceneWPRenderer::new());
                     renderer.setup_scene_wallpaper(scene_package);
                     self.renderer = Some(RenderingBackend::Scene(renderer));
                 }
-                Wallpaper::Web { .. } => {}
-                Wallpaper::Preset { .. } => {}
             }
-
-            self.renderer_initialized = false;
+            Wallpaper::Web { .. } => todo!(),
+            Wallpaper::Preset { .. } => todo!(),
         }
     }
 
@@ -92,26 +100,17 @@ pub(crate) trait WPRendererImpl {
     }
 }
 
-pub(crate) trait VideoRenderingBackend {
+pub(crate) trait VideoRenderingBackend: WPRendererImpl {
     fn setup_video_wallpaper(&mut self, video_path: PathBuf);
 }
 
-pub(crate) trait SceneRenderingBackend {
+pub(crate) trait SceneRenderingBackend: WPRendererImpl {
     fn setup_scene_wallpaper(&mut self, scene_package: &ScenePackage);
 }
 
 enum RenderingBackend {
-    Video(Box<dyn WPRendererImpl>),
-    Scene(Box<dyn WPRendererImpl>),
-}
-
-impl RenderingBackend {
-    fn current_backend_type(&self) -> WallpaperType {
-        match self {
-            RenderingBackend::Video(_) => WallpaperType::Video,
-            RenderingBackend::Scene(_) => WallpaperType::Scene,
-        }
-    }
+    Video(Box<dyn VideoRenderingBackend>),
+    Scene(Box<dyn SceneRenderingBackend>),
 }
 
 impl Deref for RenderingBackend {
@@ -130,6 +129,6 @@ impl DerefMut for RenderingBackend {
         match self {
             RenderingBackend::Video(renderer) => renderer.as_mut(),
             RenderingBackend::Scene(renderer) => renderer.as_mut(),
-        }  
+        }
     }
 }
