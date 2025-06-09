@@ -1,50 +1,47 @@
 use ffmpeg_next::format::context::Input;
 use ffmpeg_next::format::input;
 use ffmpeg_next::media;
-use std::path::{Path};
+use std::path::Path;
 use video_rs::Time;
 
 pub enum TimedPacket {
     Video(ffmpeg_next::Packet, Time),
+    #[allow(unused)] // This variant is unused but kept for future use
     Audio(ffmpeg_next::Packet, Time),
 }
 
 pub struct Demuxer {
-    ictx: Input,
+    input_context: Input,
     video_stream_idx: Option<usize>,
     audio_stream_idx: Option<usize>,
-    loop_mode: bool,
 }
 
 impl Demuxer {
-    pub fn new(path: &Path, loop_mode: bool) -> Result<Self, ffmpeg_next::Error> {
-        let ictx = input(path)?;
+    pub fn new(path: &Path) -> Result<Self, ffmpeg_next::Error> {
+        let input_context = input(path)?;
 
-        let video_stream = ictx.streams().best(media::Type::Video);
-        let audio_stream = ictx.streams().best(media::Type::Audio);
+        let video_stream = input_context.streams().best(media::Type::Video);
+        let audio_stream = input_context.streams().best(media::Type::Audio);
 
         let video_stream_idx = video_stream.map(|s| s.index());
         let audio_stream_idx = audio_stream.map(|s| s.index());
-        
+
         if video_stream_idx.is_none() && audio_stream_idx.is_none() {
             return Err(ffmpeg_next::Error::StreamNotFound);
         }
 
         Ok(Self {
-            ictx,
+            input_context,
             video_stream_idx,
             audio_stream_idx,
-            loop_mode,
         })
     }
 
-    pub fn read(
-        &mut self,
-    ) -> Option<TimedPacket> {
+    pub fn read(&mut self) -> Option<TimedPacket> {
         let mut error_count = 0;
 
         loop {
-            match self.ictx.packets().next() {
+            match self.input_context.packets().next() {
                 Some((stream, packet)) => {
                     // Let chains will be stabilized in rust 1.88
                     // if let Some(video_idx) = self.video_stream_idx && stream.index() == video_idx {
@@ -53,21 +50,28 @@ impl Demuxer {
                     //     return Ok(Some((PacketType::Audio, packet)));
                     // }
                     let time = packet.pts();
-                    if self.video_stream_idx.is_some_and(|video_idx| stream.index() == video_idx) {
-                        return Some(TimedPacket::Video(packet, Time::new(time, stream.time_base())));
-                    } else if self.audio_stream_idx.is_some_and(|audio_idx| stream.index() == audio_idx) {
-                        return Some(TimedPacket::Audio(packet, Time::new(time, stream.time_base())));
+                    if self
+                        .video_stream_idx
+                        .is_some_and(|video_idx| stream.index() == video_idx)
+                    {
+                        return Some(TimedPacket::Video(
+                            packet,
+                            Time::new(time, stream.time_base()),
+                        ));
+                    } else if self
+                        .audio_stream_idx
+                        .is_some_and(|audio_idx| stream.index() == audio_idx)
+                    {
+                        return Some(TimedPacket::Audio(
+                            packet,
+                            Time::new(time, stream.time_base()),
+                        ));
                     }
                 }
                 None => {
                     error_count += 1;
                     if error_count > 3 {
-                        if self.loop_mode {
-                            self.seek_to_start().unwrap();
-                            error_count = 0;
-                        } else {
-                            return None;
-                        }
+                        return None;
                     }
                 }
             }
@@ -75,6 +79,6 @@ impl Demuxer {
     }
 
     pub fn seek_to_start(&mut self) -> Result<(), ffmpeg_next::Error> {
-        self.ictx.seek(i64::MIN, ..)
+        self.input_context.seek(i64::MIN, ..)
     }
 }

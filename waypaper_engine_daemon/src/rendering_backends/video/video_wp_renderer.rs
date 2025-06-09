@@ -174,7 +174,7 @@ fn start_decoding_thread(
     let (mut decoder_split, reader, _) = decoder.into_parts();
 
     let mut demuxer =
-        Demuxer::new(reader.source.as_path(), false).expect("Failed to create demuxer");
+        Demuxer::new(reader.source.as_path()).expect("Failed to create demuxer");
 
     let handle = thread::spawn(move || {
         tracing::debug!("Spawn decoding thread");
