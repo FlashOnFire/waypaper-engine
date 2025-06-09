@@ -1,12 +1,5 @@
-use std::cell::OnceCell;
-use std::ffi::c_void;
-use std::path::PathBuf;
-use std::ptr::null;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
-use std::thread;
-use std::thread::JoinHandle;
-use std::time::Instant;
+use crate::rendering_backends::video;
+use crate::rendering_backends::video::decoder::VideoDecoder;
 use crate::rendering_backends::video::demuxer::{Demuxer, TimedPacket};
 use crate::rendering_backends::video::frames::OrderedFramesContainer;
 use crate::rendering_backends::video::gl::{
@@ -17,6 +10,15 @@ use crate::rendering_backends::video::video_backend_consts::{
 };
 use crate::wallpaper_renderer::{VideoRenderingBackend, WPRendererImpl};
 use gl::types::{GLfloat, GLint, GLsizei, GLuint};
+use std::cell::OnceCell;
+use std::ffi::c_void;
+use std::path::PathBuf;
+use std::ptr::null;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
+use std::thread;
+use std::thread::JoinHandle;
+use std::time::Instant;
 use video_rs::hwaccel::HardwareAccelerationDeviceType;
 use video_rs::{Decoder, DecoderBuilder, Error, Frame, Time};
 
@@ -173,10 +175,15 @@ fn start_decoding_thread(
 
     let (mut decoder_split, reader, _) = decoder.into_parts();
 
-    let mut demuxer =
-        Demuxer::new(reader.source.as_path()).expect("Failed to create demuxer");
+    let mut demuxer = Demuxer::new(reader.source.as_path()).expect("Failed to create demuxer");
 
     let handle = thread::spawn(move || {
+        let video_stream = demuxer
+            .video_stream()
+            .expect("No video stream found in demuxer");
+
+        let mut decoder =
+            VideoDecoder::new(video_stream.parameters(), video_stream.time_base()).unwrap();
         tracing::debug!("Spawn decoding thread");
 
         let mut rewind_count: u32 = 0;
@@ -199,18 +206,31 @@ fn start_decoding_thread(
                 };
             };
 
-            tracing::info!("Decoding packet with PTS: {}, time base: {:?}", packet.pts().unwrap(), packet.time_base());
+            tracing::info!(
+                "Decoding packet with PTS: {}, time base: {:?}",
+                packet.pts().unwrap(),
+                packet.time_base()
+            );
 
-            let timed_frame: TimedFrame = match decoder_split
-                .decode(video_rs::Packet::new(packet, time.into_parts().1))
-                .expect("Failed to decode video frame")
-            {
-                Some((time, frame)) => TimedFrame {
+            // let timed_frame: TimedFrame = match decoder_split
+            //     .decode(video_rs::Packet::new(packet, time.into_parts().1))
+            //     .expect("Failed to decode video frame")
+            
+            let dts = packet.dts();
+            let timed_frame = match decoder.receive_frame(packet) {
+                Ok(Some(mut frame)) => TimedFrame {
                     rewind_count,
-                    time,
-                    frame,
+                    time: Time::new(dts, decoder.decoder_time_base()),
+                    frame: video_rs::ffi::convert_frame_to_ndarray_rgb24(&mut frame).unwrap(),
                 },
-                None => continue,
+                Ok(None) => {
+                    tracing::debug!("No frame received, waiting for more data");
+                    continue;
+                }
+                Err(e) => {
+                    tracing::error!("Failed to decode video frame: {}", e);
+                    continue;
+                }
             };
 
             while !shutdown.load(Ordering::Relaxed) {

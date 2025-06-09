@@ -1,6 +1,6 @@
 use ffmpeg_next::format::context::Input;
 use ffmpeg_next::format::input;
-use ffmpeg_next::media;
+use ffmpeg_next::{media, Stream};
 use std::path::Path;
 use video_rs::Time;
 
@@ -80,5 +80,9 @@ impl Demuxer {
 
     pub fn seek_to_start(&mut self) -> Result<(), ffmpeg_next::Error> {
         self.input_context.seek(i64::MIN, ..)
+    }
+    
+    pub fn video_stream(&self) -> Option<Stream> {
+        self.video_stream_idx.map(|stream_idx| self.input_context.stream(stream_idx).unwrap())
     }
 }

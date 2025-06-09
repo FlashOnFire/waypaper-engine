@@ -2,7 +2,7 @@ use ffmpeg_next::frame::Video;
 use std::cmp::{Ordering, Reverse};
 use std::collections::BinaryHeap;
 
-struct TimedVideoFrame {
+pub struct TimedVideoFrame {
     rewind_count: u32,
     frame: Video,
 }
