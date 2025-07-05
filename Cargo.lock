@@ -5041,18 +5041,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
-name = "video-rs"
-version = "0.10.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9c9f6df3b49d862ea35d2c509801ee64983f2169ea02e3a8642e69ce2230e47c"
-dependencies = [
- "ffmpeg-next",
- "ndarray",
- "tracing",
- "url",
-]
-
-[[package]]
 name = "vswhom"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5327,6 +5315,7 @@ dependencies = [
  "khronos-egl",
  "linux-ipc",
  "lz4_flex",
+ "ndarray",
  "num_enum",
  "num_enum_derive",
  "serde",
@@ -5335,7 +5324,6 @@ dependencies = [
  "smithay-client-toolkit",
  "tracing",
  "tracing-subscriber",
- "video-rs",
  "wayland-egl",
  "waypaper_engine_shared",
 ]
