@@ -1,10 +1,10 @@
 use anyhow::anyhow;
+use ffmpeg_next::Rational;
 use ffmpeg_next::error::EAGAIN;
 use ffmpeg_next::ffi::av_frame_copy_props;
 use ffmpeg_next::format::Pixel;
 use ffmpeg_next::frame::Video as VideoFrame;
-use ffmpeg_next::{codec, software, Error, Packet};
-use ffmpeg_next::Rational;
+use ffmpeg_next::{Error, Packet, codec, software};
 
 pub struct VideoDecoder {
     decoder: codec::decoder::Video,
@@ -97,15 +97,21 @@ impl VideoDecoder {
     }
 
     pub fn drain(&mut self) {
+        tracing::debug!("Draining decoder");
         self.decoder.send_eof().unwrap();
+        let mut count = 0;
+        let mut decoded = VideoFrame::empty();
+
         loop {
-            let mut decoded = VideoFrame::empty();
-            loop {
-                if self.decoder.receive_frame(&mut decoded).is_err() {
+            if self.decoder.receive_frame(&mut decoded).is_err() {
+                count += 1;
+                if count > 3 {
                     break;
                 }
             }
         }
+
+        tracing::debug!("Decoder drained");
     }
 }
 

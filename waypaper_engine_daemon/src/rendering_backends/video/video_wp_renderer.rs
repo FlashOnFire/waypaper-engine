@@ -204,7 +204,7 @@ fn start_decoding_thread(
         }
 
         tracing::debug!("Got out of the decoding loop, draining decoder");
-        // Todo: Drain the decoder to ensure all frames are processed
+        decoder.drain();
 
         tracing::debug!("Exited decoding Thread!");
     });
@@ -340,6 +340,7 @@ impl WPRendererImpl for VideoWPRenderer {
 
 impl Drop for RenderData {
     fn drop(&mut self) {
+        tracing::info!("Dropping RenderData, shutting down decoding thread");
         self.shutdown.store(true, Ordering::Relaxed);
         self.frames.lock().unwrap().clear();
         self.decoding_thread_handle.get().unwrap().thread().unpark();
