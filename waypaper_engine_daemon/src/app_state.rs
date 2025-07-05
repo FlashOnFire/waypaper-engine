@@ -29,7 +29,7 @@ impl AppState {
     }
 
     pub fn run(&mut self) -> Result<(), Box<dyn Error>> {
-        video_rs::init()?;
+        ffmpeg_next::init()?;
 
         let (tx, rx) = mpsc::channel::<(IPCRequest, Sender<IPCResponse>)>();
 

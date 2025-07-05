@@ -2,10 +2,9 @@ use anyhow::anyhow;
 use ffmpeg_next::error::EAGAIN;
 use ffmpeg_next::ffi::av_frame_copy_props;
 use ffmpeg_next::format::Pixel;
-use ffmpeg_next::frame::Video;
+use ffmpeg_next::frame::Video as VideoFrame;
 use ffmpeg_next::{codec, software, Error, Packet};
-use ffmpeg_next::{Rational, Stream};
-use video_rs::frame::RawFrame;
+use ffmpeg_next::Rational;
 
 pub struct VideoDecoder {
     decoder: codec::decoder::Video,
@@ -38,7 +37,7 @@ impl VideoDecoder {
                     decoder.height(),
                     software::scaling::Flags::AREA,
                 )
-                .map_err(video_rs::Error::BackendError)?,
+                .map_err(|_| anyhow!("Backend error"))?,
             )
         } else {
             None
@@ -59,21 +58,25 @@ impl VideoDecoder {
         self.decoder.time_base()
     }
 
+    pub fn size(&self) -> (u32, u32) {
+        (self.decoder.width(), self.decoder.height())
+    }
+
     pub fn feed(&mut self, mut packet: Packet) -> anyhow::Result<()> {
         packet.rescale_ts(self.stream_time_base, self.decoder.time_base());
         self.decoder.send_packet(&packet)?;
         Ok(())
     }
 
-    pub fn receive_frame(&mut self, packet: Packet) -> anyhow::Result<Option<Video>> {
+    pub fn receive_frame(&mut self, packet: Packet) -> anyhow::Result<Option<VideoFrame>> {
         self.feed(packet)?;
         tracing::info!("frame fed to decoder");
-        let mut decoded = Video::empty();
+        let mut decoded = VideoFrame::empty();
 
         match self.decoder.receive_frame(&mut decoded) {
             Ok(_) => {
                 if let Some(ref mut scaler) = self.scaler {
-                    let mut frame_scaled = RawFrame::empty();
+                    let mut frame_scaled = VideoFrame::empty();
                     scaler.run(&decoded, &mut frame_scaled)?;
                     unsafe {
                         av_frame_copy_props(frame_scaled.as_mut_ptr(), decoded.as_ptr());
@@ -96,7 +99,7 @@ impl VideoDecoder {
     pub fn drain(&mut self) {
         self.decoder.send_eof().unwrap();
         loop {
-            let mut decoded = Video::empty();
+            let mut decoded = VideoFrame::empty();
             loop {
                 if self.decoder.receive_frame(&mut decoded).is_err() {
                     break;
@@ -105,3 +108,6 @@ impl VideoDecoder {
         }
     }
 }
+
+unsafe impl Send for VideoDecoder {}
+unsafe impl Sync for VideoDecoder {}

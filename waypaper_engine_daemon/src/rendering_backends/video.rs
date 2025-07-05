@@ -4,3 +4,4 @@ mod demuxer;
 mod decoder;
 mod frames;
 mod gl;
+mod utils;

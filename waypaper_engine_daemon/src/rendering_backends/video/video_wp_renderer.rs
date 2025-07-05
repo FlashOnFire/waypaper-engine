@@ -1,7 +1,6 @@
-use crate::rendering_backends::video;
 use crate::rendering_backends::video::decoder::VideoDecoder;
 use crate::rendering_backends::video::demuxer::{Demuxer, TimedPacket};
-use crate::rendering_backends::video::frames::OrderedFramesContainer;
+use crate::rendering_backends::video::frames::{OrderedFramesContainer, TimedVideoFrame};
 use crate::rendering_backends::video::gl::{
     ElementBuffer, GLDataType, Shader, VertexArray, VertexAttribute, VertexBuffer,
 };
@@ -19,8 +18,9 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::thread::JoinHandle;
 use std::time::Instant;
-use video_rs::hwaccel::HardwareAccelerationDeviceType;
-use video_rs::{Decoder, DecoderBuilder, Error, Frame, Time};
+
+use crate::rendering_backends::video::utils;
+use crate::rendering_backends::video::utils::FrameArray;
 
 pub struct VideoWPRenderer {
     render_context: Option<RenderContext>,
@@ -42,10 +42,10 @@ struct RenderData {
     size: (u32, u32),
 
     last_frame_time: Instant,
-    last_frame: Frame,
+    last_frame: Option<FrameArray>,
 
     decoding_thread_handle: OnceCell<JoinHandle<()>>,
-    frames: Arc<Mutex<OrderedFramesContainer<TimedFrame>>>, // Using BinaryHeap to keep frames in order of their timestamps
+    frames: Arc<Mutex<OrderedFramesContainer<TimedVideoFrame>>>, // Using BinaryHeap to keep frames in order of their timestamps
 
     shutdown: Arc<AtomicBool>,
 }
@@ -60,19 +60,22 @@ impl VideoWPRenderer {
     }
 
     fn start_playback(&mut self) {
-        let source = video_rs::Location::File(self.video_path.as_ref().unwrap().clone());
-        //let decoder = Decoder::new(source).expect("Failed to create decoder");
+        let mut demuxer = Demuxer::new(self.video_path.clone().unwrap().as_path())
+            .expect("Failed to create demuxer");
+        let video_stream = demuxer
+            .video_stream()
+            .expect("No video stream found in demuxer");
 
-        let decoder = DecoderBuilder::new(source)
-            .with_hardware_acceleration(HardwareAccelerationDeviceType::VaApi)
-            .build()
-            .expect("Failed to create decoder");
+        let framerate = (video_stream.avg_frame_rate().numerator() as f32)
+            / (video_stream.avg_frame_rate().denominator() as f32);
 
-        let size = decoder.size_out();
-        let framerate = decoder.frame_rate();
+        let decoder =
+            VideoDecoder::new(video_stream.parameters(), video_stream.time_base()).unwrap();
+        let size = decoder.size();
 
         let shutdown_arc = Arc::new(AtomicBool::new(false));
-        let (thread_handle, frames_vec) = start_decoding_thread(decoder, shutdown_arc.clone());
+        let (thread_handle, frames_vec) =
+            start_decoding_thread(demuxer, decoder, shutdown_arc.clone());
 
         let ctx = self.render_context.as_mut().unwrap();
 
@@ -93,14 +96,12 @@ impl VideoWPRenderer {
                 null(),
             );
 
-            let last_frame = frames_vec.lock().unwrap().peek().unwrap().frame.clone();
-
             ctx.data.replace(RenderData {
                 texture,
                 framerate,
                 size,
                 last_frame_time: Instant::now(),
-                last_frame,
+                last_frame: None,
                 decoding_thread_handle: OnceCell::from(thread_handle),
                 frames: frames_vec,
                 shutdown: shutdown_arc,
@@ -118,78 +119,26 @@ impl VideoRenderingBackend for VideoWPRenderer {
     }
 }
 
-struct TimedFrame {
-    rewind_count: u32,
-    time: Time,
-    frame: Frame,
-}
-
-impl PartialEq for TimedFrame {
-    fn eq(&self, other: &Self) -> bool {
-        self.time == other.time
-    }
-}
-
-impl Eq for TimedFrame {}
-impl Ord for TimedFrame {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        match self.rewind_count.cmp(&other.rewind_count) {
-            std::cmp::Ordering::Equal => {
-                self.time.as_secs_f64().total_cmp(&other.time.as_secs_f64())
-            }
-            ordering => ordering,
-        }
-    }
-}
-
-impl PartialOrd for TimedFrame {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl From<TimedFrame> for Frame {
-    fn from(timed_frame: TimedFrame) -> Self {
-        timed_frame.frame
-    }
-}
-
 fn start_decoding_thread(
-    mut decoder: Decoder,
+    mut demuxer: Demuxer,
+    mut decoder: VideoDecoder,
     shutdown: Arc<AtomicBool>,
 ) -> (
     JoinHandle<()>,
-    Arc<Mutex<OrderedFramesContainer<TimedFrame>>>,
+    Arc<Mutex<OrderedFramesContainer<TimedVideoFrame>>>,
 ) {
-    let mut frames_vec: OrderedFramesContainer<TimedFrame> =
+    let frames_vec: OrderedFramesContainer<TimedVideoFrame> =
         OrderedFramesContainer::with_capacity(THREAD_FRAME_BUFFER_SIZE);
-    let first_frame = decoder.decode().unwrap();
-    frames_vec.push(TimedFrame {
-        rewind_count: 0,
-        time: first_frame.0,
-        frame: first_frame.1,
-    });
-    let frames_arc = Arc::new(Mutex::new(frames_vec)); // init with first frame
+
+    let frames_arc = Arc::new(Mutex::new(frames_vec));
 
     let weak = Arc::downgrade(&frames_arc);
 
-    let (mut decoder_split, reader, _) = decoder.into_parts();
-
-    let mut demuxer = Demuxer::new(reader.source.as_path()).expect("Failed to create demuxer");
-
     let handle = thread::spawn(move || {
-        let video_stream = demuxer
-            .video_stream()
-            .expect("No video stream found in demuxer");
-
-        let mut decoder =
-            VideoDecoder::new(video_stream.parameters(), video_stream.time_base()).unwrap();
-        tracing::debug!("Spawn decoding thread");
-
         let mut rewind_count: u32 = 0;
 
         'outer: while !shutdown.load(Ordering::Relaxed) {
-            let (packet, time) = loop {
+            let (packet, _time) = loop {
                 let packet_result: Option<TimedPacket> = demuxer.read();
 
                 match packet_result {
@@ -212,17 +161,16 @@ fn start_decoding_thread(
                 packet.time_base()
             );
 
-            // let timed_frame: TimedFrame = match decoder_split
-            //     .decode(video_rs::Packet::new(packet, time.into_parts().1))
-            //     .expect("Failed to decode video frame")
-            
-            let dts = packet.dts();
             let timed_frame = match decoder.receive_frame(packet) {
-                Ok(Some(mut frame)) => TimedFrame {
-                    rewind_count,
-                    time: Time::new(dts, decoder.decoder_time_base()),
-                    frame: video_rs::ffi::convert_frame_to_ndarray_rgb24(&mut frame).unwrap(),
-                },
+                Ok(Some(mut frame)) => {
+                    let timestamp = frame.timestamp();
+
+                    TimedVideoFrame::new(
+                        utils::convert_frame_to_ndarray_rgb24(&mut frame).unwrap(),
+                        timestamp,
+                        rewind_count,
+                    )
+                }
                 Ok(None) => {
                     tracing::debug!("No frame received, waiting for more data");
                     continue;
@@ -256,9 +204,7 @@ fn start_decoding_thread(
         }
 
         tracing::debug!("Got out of the decoding loop, draining decoder");
-        while let Ok(Some(_)) = decoder_split.drain_raw() {
-            tracing::debug!("Draining frame");
-        }
+        // Todo: Drain the decoder to ensure all frames are processed
 
         tracing::debug!("Exited decoding Thread!");
     });
@@ -312,13 +258,19 @@ impl WPRendererImpl for VideoWPRenderer {
         let ctx = self.render_context.as_mut().unwrap();
         let data = ctx.data.as_mut().unwrap();
 
-        let frame = if Instant::now()
+        let frame= if Instant::now()
             .duration_since(data.last_frame_time)
             .as_secs_f32()
             < 1.0 / data.framerate
         {
             tracing::debug!("Not enough time since last frame, rendering last frame again");
-            &data.last_frame
+            match data.last_frame.as_ref() {
+                Some(frame) => frame,
+                None => {
+                    tracing::warn!("No last frame available, cannot render");
+                    return;
+                }
+            }
         } else {
             data.last_frame_time = Instant::now();
 
@@ -326,23 +278,29 @@ impl WPRendererImpl for VideoWPRenderer {
 
             if frames.is_empty() || frames.len() < 16 {
                 tracing::debug!("Not enough frames in queue, rendering last frame");
-                &data.last_frame
+                match data.last_frame.as_ref() {
+                    Some(frame) => frame,
+                    None => {
+                        tracing::warn!("No last frame available, cannot render");
+                        return;
+                    }
+                }
             } else {
-                let TimedFrame {
+                let TimedVideoFrame {
                     rewind_count,
-                    time,
+                    timestamp,
                     frame,
                 } = frames.pop().unwrap();
                 data.decoding_thread_handle.get().unwrap().thread().unpark();
 
                 tracing::info!(
-                    "Rendering new frame, frames in queue: {}, rewind count: {}, frame time: {}",
+                    "Rendering new frame, frames in queue: {}, rewind count: {}, frame time: {:?}",
                     frames.len(),
                     rewind_count,
-                    time.as_secs_f64()
+                    timestamp
                 );
-                data.last_frame = frame;
-                &data.last_frame
+                data.last_frame = Some(frame);
+                data.last_frame.as_ref().unwrap()
             }
         };
 

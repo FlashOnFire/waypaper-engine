@@ -1,16 +1,18 @@
-use ffmpeg_next::frame::Video;
 use std::cmp::{Ordering, Reverse};
 use std::collections::BinaryHeap;
+use crate::rendering_backends::video::utils::FrameArray;
 
 pub struct TimedVideoFrame {
-    rewind_count: u32,
-    frame: Video,
+    pub(crate) rewind_count: u32,
+    pub(crate) frame: FrameArray,
+    pub(crate) timestamp: Option<i64>,
 }
 
 impl TimedVideoFrame {
-    pub fn from(frame: Video, rewind_count: u32) -> Self {
+    pub fn new(frame: FrameArray, timestamp: Option<i64>, rewind_count: u32) -> Self {
         Self {
             rewind_count,
+            timestamp,
             frame,
         }
     }
@@ -18,7 +20,7 @@ impl TimedVideoFrame {
 
 impl PartialEq for TimedVideoFrame {
     fn eq(&self, other: &Self) -> bool {
-        self.rewind_count == other.rewind_count && self.frame.timestamp() == other.frame.timestamp()
+        self.rewind_count == other.rewind_count && self.timestamp == other.timestamp
     }
 }
 
@@ -27,7 +29,7 @@ impl Eq for TimedVideoFrame {}
 impl Ord for TimedVideoFrame {
     fn cmp(&self, other: &Self) -> Ordering {
         match self.rewind_count.cmp(&other.rewind_count) {
-            Ordering::Equal => self.frame.timestamp().cmp(&other.frame.timestamp()),
+            Ordering::Equal => self.timestamp.cmp(&other.timestamp),
             other => other,
         }
     }
@@ -65,7 +67,7 @@ where
     pub fn pop(&mut self) -> Option<T> {
         self.frames.pop().map(|Reverse(frame)| frame)
     }
-    
+
     pub fn peek(&self) -> Option<&T> {
         self.frames.peek().map(|Reverse(frame)| frame)
     }

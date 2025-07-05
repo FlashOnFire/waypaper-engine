@@ -2,12 +2,11 @@ use ffmpeg_next::format::context::Input;
 use ffmpeg_next::format::input;
 use ffmpeg_next::{media, Stream};
 use std::path::Path;
-use video_rs::Time;
 
 pub enum TimedPacket {
-    Video(ffmpeg_next::Packet, Time),
+    Video(ffmpeg_next::Packet, f32),
     #[allow(unused)] // This variant is unused but kept for future use
-    Audio(ffmpeg_next::Packet, Time),
+    Audio(ffmpeg_next::Packet, f32),
 }
 
 pub struct Demuxer {
@@ -43,28 +42,20 @@ impl Demuxer {
         loop {
             match self.input_context.packets().next() {
                 Some((stream, packet)) => {
-                    // Let chains will be stabilized in rust 1.88
-                    // if let Some(video_idx) = self.video_stream_idx && stream.index() == video_idx {
-                    //     return Ok(Some((PacketType::Video, packet)));
-                    // } else if let Some(audio_idx) = self.audio_stream_idx && stream.index() == audio_idx {
-                    //     return Ok(Some((PacketType::Audio, packet)));
-                    // }
-                    let time = packet.pts();
-                    if self
-                        .video_stream_idx
-                        .is_some_and(|video_idx| stream.index() == video_idx)
+                    let time = packet.pts().map(|time| (time as f32) * (stream.time_base().numerator() as f32 / stream.time_base().denominator() as f32)).unwrap_or(0.0);
+                    if let Some(video_idx) = self.video_stream_idx
+                        && stream.index() == video_idx
                     {
                         return Some(TimedPacket::Video(
                             packet,
-                            Time::new(time, stream.time_base()),
+                            time,
                         ));
-                    } else if self
-                        .audio_stream_idx
-                        .is_some_and(|audio_idx| stream.index() == audio_idx)
+                    } else if let Some(audio_idx) = self.audio_stream_idx
+                        && stream.index() == audio_idx
                     {
                         return Some(TimedPacket::Audio(
                             packet,
-                            Time::new(time, stream.time_base()),
+                            time,
                         ));
                     }
                 }
@@ -81,8 +72,9 @@ impl Demuxer {
     pub fn seek_to_start(&mut self) -> Result<(), ffmpeg_next::Error> {
         self.input_context.seek(i64::MIN, ..)
     }
-    
+
     pub fn video_stream(&self) -> Option<Stream> {
-        self.video_stream_idx.map(|stream_idx| self.input_context.stream(stream_idx).unwrap())
+        self.video_stream_idx
+            .map(|stream_idx| self.input_context.stream(stream_idx).unwrap())
     }
 }
