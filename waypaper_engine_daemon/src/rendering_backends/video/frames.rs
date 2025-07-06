@@ -62,7 +62,7 @@ where
 
     pub fn push(&mut self, frame: T) {
         if self.frames.iter().any(|Reverse(f)| f.eq(&frame)) {
-            tracing::info!("Frame already exists in the queue, skipping push");
+            tracing::warn!("Frame already exists in the queue, skipping push");
             return;
         }
 
