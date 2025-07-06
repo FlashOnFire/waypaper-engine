@@ -3,36 +3,37 @@
   lib,
   rustPlatform,
   mold-wrapped,
-}: let
+}:
+let
   cargoRoot = "waypaper_engine_cli";
   cargoToml = lib.importTOML ../../${cargoRoot}/Cargo.toml;
   rev = self.shortRev or self.dirtyShortRev or "dirty";
 in
-  rustPlatform.buildRustPackage {
-    pname = cargoToml.package.name;
-    version = "${cargoToml.package.version}+git.${rev}";
+rustPlatform.buildRustPackage {
+  pname = cargoToml.package.name;
+  version = "${cargoToml.package.version}+git.${rev}";
 
-    src = lib.cleanSource ../..;
+  src = lib.cleanSource ../..;
 
-    inherit cargoRoot;
-    buildAndTestSubdir = cargoRoot;
+  inherit cargoRoot;
+  buildAndTestSubdir = cargoRoot;
 
-    cargoLock.lockFile = ../../Cargo.lock;
+  cargoLock.lockFile = ../../Cargo.lock;
 
-    nativeBuildInputs = [
-      mold-wrapped
-    ];
+  nativeBuildInputs = [
+    mold-wrapped
+  ];
 
-    env.RUSTFLAGS = "-C link-arg=-fuse-ld=mold";
+  env.RUSTFLAGS = "-C link-arg=-fuse-ld=mold";
 
-    postPatch = ''
-      ln -s ${../../Cargo.lock} ${cargoRoot}/Cargo.lock
-    '';
+  postPatch = ''
+    ln -s ${../../Cargo.lock} ${cargoRoot}/Cargo.lock
+  '';
 
-    doCheck = false;
+  doCheck = false;
 
-    meta = {
-      mainProgram = cargoToml.package.name;
-      platforms = lib.platforms.linux;
-    };
-  }
+  meta = {
+    mainProgram = cargoToml.package.name;
+    platforms = lib.platforms.linux;
+  };
+}
