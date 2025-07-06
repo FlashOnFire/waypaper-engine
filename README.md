@@ -21,18 +21,18 @@ If you're trying it out, please consider it a **preview** and not a fully functi
   Supports extracting and interpreting Wallpaper Engine proprietary formats for textures and other assets.
 - **Simple UI for choosing a wallpaper:**  
   A basic user interface is available with search functionality but lack advanced options
+- **CLI:**  
+  A way to communicate with the daemon without the UI to integrate the app in your bash scripts, startup scripts, or automation apps of your choice
 
 ### 🟡 Partially Working:
 - **Video wallpapers:**  
-  Basic playback functionality is implemented using ``video_rs`` and a homemade renderer using ``OpenGL``, but stability needs improvement.
+  Video playback functionality is implemented using a homemade renderer using ``OpenGL`` and ``ffmpeg``. Mostly working, performance is not optimal yet, but it is usable for most videos.
 - **Multiscreen support:**  
   Works in basic scenario, needs more testing for exotic setups. Fully implemented on daemon side, but the UI currently don't refresh monitor list on hotplug and needs to be restarted
 
 ### 🛠️ In Progress:
 - **Customization and advanced settings:**  
   Settings for selecting WE installation directory, fps cap, animation speed, etc
-- **IPC:**  
-  A way to communicate with the daemon without the UI to integrate the app in your bash scripts, startup scripts, or automation apps of your choice
 - **Scenes and Web wallpapers:**  
   More advanced wallpaper types, involving 3D real-time rendering or web display
 
