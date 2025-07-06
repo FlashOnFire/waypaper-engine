@@ -158,6 +158,8 @@ impl DecodingPipeline {
         self.shutdown_flag.store(true, Ordering::Relaxed);
 
         if let Some(thread) = self.decoding_thread.take() {
+            tracing::info!("Waiting for decoding thread to finish");
+            thread.thread().unpark(); // Unpark the thread to ensure it can exit
             thread.join().expect("Failed to join decoding thread");
         }
     }
