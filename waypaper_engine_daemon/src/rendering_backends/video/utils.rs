@@ -50,6 +50,7 @@ pub fn convert_frame_to_ndarray_rgb24(frame: &mut VideoFrame) -> anyhow::Result<
     }
 }
 
+#[allow(dead_code)]
 pub fn make_yadif_filter_graph(
     width: u32,
     height: u32,

@@ -117,47 +117,48 @@ impl VideoDecoder {
                     decoded.format()
                 );
 
-                if decoded.is_interlaced() {
-                    tracing::debug!("Frame is interlaced, applying deinterlacing");
-                    if self.deinterlacer.is_none() {
-                        self.deinterlacer = Some(
-                            Deinterlacer::new(
-                                decoded.width(),
-                                decoded.height(),
-                                self.decoder.time_base(),
-                                self.decoder.format().into(),
-                                self.decoder.aspect_ratio(),
-                            )
-                            .expect("Failed to create deinterlacer"),
-                        )
-                    }
-
-                    let deinterlacer = self.deinterlacer.as_mut().unwrap();
-                    deinterlacer.feed(&decoded)?;
-
-                    let mut deinterlaced_frames = vec![];
-
-                    // TODO: more robust error handling
-                    while let Ok(deinterlaced) = deinterlacer.pull() {
-                        tracing::debug!(
-                            "Deinterlaced frame: pts: {:?}, width: {}, height: {}, format: {:?}",
-                            deinterlaced.pts(),
-                            deinterlaced.width(),
-                            deinterlaced.height(),
-                            deinterlaced.format()
-                        );
-                        deinterlaced_frames.push(deinterlaced);
-                    }
-
-                    tracing::debug!("Deinterlaced {} frames", deinterlaced_frames.len());
-
-                    let processed_frames = self.process_decoded_frames(deinterlaced_frames).expect("Failed to process deinterlaced frames");
-
-                    Ok(Some(processed_frames))
-                } else {
+                // if decoded.is_interlaced() {
+                //     tracing::debug!("Frame is interlaced, applying deinterlacing");
+                //     if self.deinterlacer.is_none() {
+                //         self.deinterlacer = Some(
+                //             Deinterlacer::new(
+                //                 decoded.width(),
+                //                 decoded.height(),
+                //                 self.decoder.time_base(),
+                //                 self.decoder.format().into(),
+                //                 self.decoder.aspect_ratio(),
+                //             )
+                //             .expect("Failed to create deinterlacer"),
+                //         )
+                //     }
+                //
+                //     let deinterlacer = self.deinterlacer.as_mut().unwrap();
+                //     deinterlacer.feed(&decoded)?;
+                //
+                //     let mut deinterlaced_frames = vec![];
+                //
+                //     // TODO: more robust error handling
+                //     while let Ok(deinterlaced) = deinterlacer.pull() {
+                //         tracing::debug!(
+                //             "Deinterlaced frame: pts: {:?}, width: {}, height: {}, format: {:?}",
+                //             deinterlaced.pts(),
+                //             deinterlaced.width(),
+                //             deinterlaced.height(),
+                //             deinterlaced.format()
+                //         );
+                //         deinterlaced_frames.push(deinterlaced);
+                //     }
+                //
+                //     tracing::debug!("Deinterlaced {} frames", deinterlaced_frames.len());
+                //
+                //     let processed_frames = self.process_decoded_frames(deinterlaced_frames).expect("Failed to process deinterlaced frames");
+                //
+                //     Ok(Some(processed_frames))
+                // Note to self: if we want to support deinterlacing, we need to flush the deinterlacer at the end of the stream
+                // } else {
                     let processed_frame = self.process_decoded_frame(decoded)?;
                     Ok(Some(vec![processed_frame]))
-                }
+                // }
             }
             Err(Error::Eof) => Err(anyhow!("Read exhausted")),
             Err(Error::Other { errno }) if errno == EAGAIN => {
