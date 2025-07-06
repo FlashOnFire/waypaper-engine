@@ -1,26 +1,20 @@
-use crate::rendering_backends::video::decoder::VideoDecoder;
-use crate::rendering_backends::video::demuxer::{Demuxer, TimedPacket};
-use crate::rendering_backends::video::frames::{OrderedFramesContainer, TimedVideoFrame};
+use crate::rendering_backends::video::frames::TimedVideoFrame;
 use crate::rendering_backends::video::gl::{
     ElementBuffer, GLDataType, Shader, VertexArray, VertexAttribute, VertexBuffer,
 };
+use crate::rendering_backends::video::pipeline::DecodingPipeline;
+use crate::rendering_backends::video::utils::FrameArray;
 use crate::rendering_backends::video::video_backend_consts::{
-    FRAGMENT_SHADER_SRC, INDICES, THREAD_FRAME_BUFFER_SIZE, VERTEX_DATA, VERTEX_SHADER_SRC,
+    FRAGMENT_SHADER_SRC, INDICES, VERTEX_DATA, VERTEX_SHADER_SRC,
 };
 use crate::wallpaper_renderer::{VideoRenderingBackend, WPRendererImpl};
 use gl::types::{GLfloat, GLint, GLsizei, GLuint};
-use std::cell::OnceCell;
 use std::ffi::c_void;
 use std::path::PathBuf;
 use std::ptr::null;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
-use std::thread;
-use std::thread::JoinHandle;
+use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
 use std::time::Instant;
-
-use crate::rendering_backends::video::utils;
-use crate::rendering_backends::video::utils::FrameArray;
 
 pub struct VideoWPRenderer {
     render_context: Option<RenderContext>,
@@ -44,8 +38,7 @@ struct RenderData {
     last_frame_time: Instant,
     last_frame: Option<FrameArray>,
 
-    decoding_thread_handle: OnceCell<JoinHandle<()>>,
-    frames: Arc<Mutex<OrderedFramesContainer<TimedVideoFrame>>>, // Using BinaryHeap to keep frames in order of their timestamps
+    decoding_pipeline: DecodingPipeline,
 
     shutdown: Arc<AtomicBool>,
 }
@@ -60,22 +53,12 @@ impl VideoWPRenderer {
     }
 
     fn start_playback(&mut self) {
-        let mut demuxer = Demuxer::new(self.video_path.clone().unwrap().as_path())
-            .expect("Failed to create demuxer");
-        let video_stream = demuxer
-            .video_stream()
-            .expect("No video stream found in demuxer");
-
-        let framerate = (video_stream.avg_frame_rate().numerator() as f32)
-            / (video_stream.avg_frame_rate().denominator() as f32);
-
-        let decoder =
-            VideoDecoder::new(video_stream.parameters(), video_stream.time_base()).unwrap();
-        let size = decoder.size();
+        let mut decoding_pipeline = DecodingPipeline::new(&self.video_path.clone().unwrap());
 
         let shutdown_arc = Arc::new(AtomicBool::new(false));
-        let (thread_handle, frames_vec) =
-            start_decoding_thread(demuxer, decoder, shutdown_arc.clone());
+        let size = decoding_pipeline.decoder_size();
+        let framerate = decoding_pipeline.framerate();
+        decoding_pipeline.start_decoding();
 
         let ctx = self.render_context.as_mut().unwrap();
 
@@ -102,8 +85,7 @@ impl VideoWPRenderer {
                 size,
                 last_frame_time: Instant::now(),
                 last_frame: None,
-                decoding_thread_handle: OnceCell::from(thread_handle),
-                frames: frames_vec,
+                decoding_pipeline,
                 shutdown: shutdown_arc,
             });
         }
@@ -117,99 +99,6 @@ impl VideoRenderingBackend for VideoWPRenderer {
         self.video_path = Some(video_path);
         self.started_playback = false;
     }
-}
-
-fn start_decoding_thread(
-    mut demuxer: Demuxer,
-    mut decoder: VideoDecoder,
-    shutdown: Arc<AtomicBool>,
-) -> (
-    JoinHandle<()>,
-    Arc<Mutex<OrderedFramesContainer<TimedVideoFrame>>>,
-) {
-    let frames_vec: OrderedFramesContainer<TimedVideoFrame> =
-        OrderedFramesContainer::with_capacity(THREAD_FRAME_BUFFER_SIZE);
-
-    let frames_arc = Arc::new(Mutex::new(frames_vec));
-
-    let weak = Arc::downgrade(&frames_arc);
-
-    let handle = thread::spawn(move || {
-        let mut rewind_count: u32 = 0;
-
-        'outer: while !shutdown.load(Ordering::Relaxed) {
-            let (packet, _time) = loop {
-                let packet_result: Option<TimedPacket> = demuxer.read();
-
-                match packet_result {
-                    Some(timed_packed) => match timed_packed {
-                        TimedPacket::Video(packet, time) => break (packet, time),
-                        _ => continue, // Skip non-video packets
-                    },
-                    None => {
-                        tracing::debug!("Video ended, seeking to start");
-                        demuxer.seek_to_start().unwrap();
-                        rewind_count += 1;
-                        continue;
-                    }
-                };
-            };
-
-            tracing::info!(
-                "Decoding packet with PTS: {}, time base: {:?}",
-                packet.pts().unwrap(),
-                packet.time_base()
-            );
-
-            let timed_frame = match decoder.receive_frame(packet) {
-                Ok(Some(mut frame)) => {
-                    let timestamp = frame.timestamp();
-
-                    TimedVideoFrame::new(
-                        utils::convert_frame_to_ndarray_rgb24(&mut frame).unwrap(),
-                        timestamp,
-                        rewind_count,
-                    )
-                }
-                Ok(None) => {
-                    tracing::debug!("No frame received, waiting for more data");
-                    continue;
-                }
-                Err(e) => {
-                    tracing::error!("Failed to decode video frame: {}", e);
-                    continue;
-                }
-            };
-
-            while !shutdown.load(Ordering::Relaxed) {
-                if let Some(strong) = weak.upgrade() {
-                    if strong.lock().unwrap().len() >= THREAD_FRAME_BUFFER_SIZE {
-                        tracing::debug!("Frames in queue >= 20, paused decoding");
-                        thread::park();
-                        tracing::debug!("Resumed decoding")
-                    } else {
-                        break;
-                    };
-                } else {
-                    break 'outer;
-                }
-            }
-
-            if let Some(strong) = weak.upgrade() {
-                let mut frames_vec = strong.lock().unwrap();
-                frames_vec.push(timed_frame);
-            } else {
-                break 'outer;
-            }
-        }
-
-        tracing::debug!("Got out of the decoding loop, draining decoder");
-        decoder.drain();
-
-        tracing::debug!("Exited decoding Thread!");
-    });
-
-    (handle, frames_arc)
 }
 
 impl WPRendererImpl for VideoWPRenderer {
@@ -258,7 +147,7 @@ impl WPRendererImpl for VideoWPRenderer {
         let ctx = self.render_context.as_mut().unwrap();
         let data = ctx.data.as_mut().unwrap();
 
-        let frame= if Instant::now()
+        let frame = if Instant::now()
             .duration_since(data.last_frame_time)
             .as_secs_f32()
             < 1.0 / data.framerate
@@ -274,7 +163,8 @@ impl WPRendererImpl for VideoWPRenderer {
         } else {
             data.last_frame_time = Instant::now();
 
-            let mut frames = data.frames.lock().unwrap();
+            // TODO: make this less bad
+            let mut frames = data.decoding_pipeline.frames.lock().unwrap();
 
             if frames.is_empty() || frames.len() < 16 {
                 tracing::debug!("Not enough frames in queue, rendering last frame");
@@ -291,7 +181,8 @@ impl WPRendererImpl for VideoWPRenderer {
                     timestamp,
                     frame,
                 } = frames.pop().unwrap();
-                data.decoding_thread_handle.get().unwrap().thread().unpark();
+                // TODO: remove this unpark when we have a better way to handle frame rendering
+                data.decoding_pipeline.decoding_thread.as_ref().unwrap().thread().unpark();
 
                 tracing::info!(
                     "Rendering new frame, frames in queue: {}, rewind count: {}, frame time: {:?}",
@@ -340,12 +231,7 @@ impl WPRendererImpl for VideoWPRenderer {
 
 impl Drop for RenderData {
     fn drop(&mut self) {
-        tracing::info!("Dropping RenderData, shutting down decoding thread");
-        self.shutdown.store(true, Ordering::Relaxed);
-        self.frames.lock().unwrap().clear();
-        self.decoding_thread_handle.get().unwrap().thread().unpark();
-
-        let _ = self.decoding_thread_handle.take().unwrap().join();
+        tracing::info!("Dropping RenderData");
         unsafe {
             gl::DeleteTextures(1, &self.texture);
         }

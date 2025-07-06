@@ -4,8 +4,6 @@ use std::rc::Rc;
 
 use smithay_client_toolkit::reexports::client::Connection;
 
-use waypaper_engine_shared::project::WallpaperType;
-
 use crate::egl::EGLState;
 use crate::rendering_backends::scene::scene_wp_renderer::SceneWPRenderer;
 use crate::rendering_backends::video::video_wp_renderer::VideoWPRenderer;
@@ -45,10 +43,7 @@ impl WPRenderer {
                     self.renderer = Some(RenderingBackend::Video(renderer));
                 }
             }
-            Wallpaper::Scene {
-                project,
-                scene_package,
-            } => {
+            Wallpaper::Scene { scene_package, .. } => {
                 if let Some(RenderingBackend::Scene(scene_renderer)) = &mut self.renderer {
                     scene_renderer.setup_scene_wallpaper(scene_package);
                 } else {

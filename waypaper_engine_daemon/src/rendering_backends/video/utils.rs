@@ -1,9 +1,10 @@
 use anyhow::anyhow;
 use ffmpeg_next::ffi::{av_image_copy_to_buffer, AVPixelFormat};
-use ndarray::Array3;
+use ffmpeg_next::filter::Graph;
 use ffmpeg_next::frame::Video as VideoFrame;
+use ffmpeg_next::Rational;
+use ndarray::Array3;
 pub type FrameArray = Array3<u8>;
-
 
 // Shamelessly stolen from the `video_rs` crate
 
@@ -42,7 +43,55 @@ pub fn convert_frame_to_ndarray_rgb24(frame: &mut VideoFrame) -> anyhow::Result<
         if bytes_copied == frame_array.len() as i32 {
             Ok(frame_array)
         } else {
-            Err(anyhow!("Error occurred while copying frame data to ndarray"))
+            Err(anyhow!(
+                "Error occurred while copying frame data to ndarray"
+            ))
         }
     }
 }
+
+pub fn make_yadif_filter_graph(
+    width: u32,
+    height: u32,
+    time_base: Rational,
+    pix_fmt: AVPixelFormat,
+    aspect_ratio: Rational,
+) -> Result<Graph, ffmpeg_next::Error> {
+    let mut graph = Graph::new();
+    let args = &format!(
+        "video_size={}x{}:pix_fmt={}:time_base={}/{}:pixel_aspect={}/{}",
+        width,
+        height,
+        pix_fmt as i32,
+        time_base.numerator(),
+        time_base.denominator(),
+        aspect_ratio.numerator(),
+        aspect_ratio.denominator()
+    );
+    dbg!(args);
+    graph.add(&ffmpeg_next::filter::find("buffer").unwrap(), "in", args)?;
+
+    let args = "mode=1:parity=auto:deint=interlaced";
+    graph.add(&ffmpeg_next::filter::find("yadif").unwrap(), "yadif", args)?;
+    graph.add(&ffmpeg_next::filter::find("buffersink").unwrap(), "out", "")?;
+
+    graph
+        .get("in")
+        .unwrap()
+        .link(0, &mut graph.get("yadif").unwrap(), 0);
+    graph
+        .get("yadif")
+        .unwrap()
+        .link(0, &mut graph.get("out").unwrap(), 0);
+    graph.validate()?;
+
+    Ok(graph)
+}
+
+/// Equivalent to av_rescale_q from FFmpeg
+pub(crate) fn rescale_q(value: i64, src: Rational, dst: Rational) -> i64 {
+    value * dst.numerator() as i64 * src.denominator() as i64
+        / (dst.denominator() as i64 * src.numerator() as i64)
+}
+
+

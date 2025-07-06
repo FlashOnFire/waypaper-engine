@@ -5,11 +5,11 @@ use crate::rendering_backends::video::utils::FrameArray;
 pub struct TimedVideoFrame {
     pub(crate) rewind_count: u32,
     pub(crate) frame: FrameArray,
-    pub(crate) timestamp: Option<i64>,
+    pub(crate) timestamp: f32,
 }
 
 impl TimedVideoFrame {
-    pub fn new(frame: FrameArray, timestamp: Option<i64>, rewind_count: u32) -> Self {
+    pub fn new(frame: FrameArray, timestamp: f32, rewind_count: u32) -> Self {
         Self {
             rewind_count,
             timestamp,
@@ -29,7 +29,7 @@ impl Eq for TimedVideoFrame {}
 impl Ord for TimedVideoFrame {
     fn cmp(&self, other: &Self) -> Ordering {
         match self.rewind_count.cmp(&other.rewind_count) {
-            Ordering::Equal => self.timestamp.cmp(&other.timestamp),
+            Ordering::Equal => self.timestamp.total_cmp(&other.timestamp),
             other => other,
         }
     }
@@ -61,7 +61,21 @@ where
     }
 
     pub fn push(&mut self, frame: T) {
+        if self.frames.iter().any(|Reverse(f)| f.eq(&frame)) {
+            tracing::info!("Frame already exists in the queue, skipping push");
+            return;
+        }
+
         self.frames.push(Reverse(frame));
+    }
+
+    pub fn extend<I>(&mut self, iter: I)
+    where
+        I: IntoIterator<Item = T>,
+    {
+        for frame in iter {
+            self.push(frame);
+        }
     }
 
     pub fn pop(&mut self) -> Option<T> {
