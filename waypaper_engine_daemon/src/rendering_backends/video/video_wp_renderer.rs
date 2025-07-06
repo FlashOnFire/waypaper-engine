@@ -12,8 +12,6 @@ use gl::types::{GLfloat, GLint, GLsizei, GLuint};
 use std::ffi::c_void;
 use std::path::PathBuf;
 use std::ptr::null;
-use std::sync::atomic::AtomicBool;
-use std::sync::Arc;
 use std::time::Instant;
 
 pub struct VideoWPRenderer {
@@ -39,8 +37,6 @@ struct RenderData {
     last_frame: Option<FrameArray>,
 
     decoding_pipeline: DecodingPipeline,
-
-    shutdown: Arc<AtomicBool>,
 }
 
 impl VideoWPRenderer {
@@ -55,7 +51,6 @@ impl VideoWPRenderer {
     fn start_playback(&mut self) {
         let mut decoding_pipeline = DecodingPipeline::new(&self.video_path.clone().unwrap());
 
-        let shutdown_arc = Arc::new(AtomicBool::new(false));
         let size = decoding_pipeline.decoder_size();
         let framerate = decoding_pipeline.framerate();
         decoding_pipeline.start_decoding();
@@ -86,7 +81,6 @@ impl VideoWPRenderer {
                 last_frame_time: Instant::now(),
                 last_frame: None,
                 decoding_pipeline,
-                shutdown: shutdown_arc,
             });
         }
     }
