@@ -1,24 +1,18 @@
-use std::cell::OnceCell;
-use std::cmp::Reverse;
-use std::collections::{BinaryHeap};
-use std::ffi::{c_void, CString};
+use crate::rendering_backends::video::frames::TimedVideoFrame;
+use crate::rendering_backends::video::gl::{
+    ElementBuffer, GLDataType, Shader, VertexArray, VertexAttribute, VertexBuffer,
+};
+use crate::rendering_backends::video::pipeline::DecodingPipeline;
+use crate::rendering_backends::video::utils::FrameArray;
+use crate::rendering_backends::video::video_backend_consts::{
+    FRAGMENT_SHADER_SRC, INDICES, VERTEX_DATA, VERTEX_SHADER_SRC,
+};
+use crate::wallpaper_renderer::{VideoRenderingBackend, WPRendererImpl};
+use gl::types::{GLfloat, GLint, GLsizei, GLuint};
+use std::ffi::c_void;
 use std::path::PathBuf;
 use std::ptr::null;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
-use std::thread;
-use std::thread::JoinHandle;
 use std::time::Instant;
-
-use crate::gl_utils::{compile_shader, link_program};
-use crate::wallpaper_renderer::{VideoRenderingBackend, WPRendererImpl};
-use gl::types::{GLfloat, GLint, GLsizei, GLsizeiptr, GLuint};
-use video_rs::hwaccel::HardwareAccelerationDeviceType;
-use video_rs::{Decoder, DecoderBuilder, Error, Frame, Time};
-
-use crate::rendering_backends::video::video_backend_consts::{
-    FRAGMENT_SHADER_SRC, INDICES, THREAD_FRAME_BUFFER_SIZE, VERTEX_DATA, VERTEX_SHADER_SRC,
-};
 
 pub struct VideoWPRenderer {
     render_context: Option<RenderContext>,
@@ -28,10 +22,8 @@ pub struct VideoWPRenderer {
 }
 
 struct RenderContext {
-    vbo: GLuint,
-    program: GLuint,
-    vao: GLuint,
-    ebo: GLuint,
+    shader: Shader,
+    vao: VertexArray,
     data: Option<RenderData>,
 }
 
@@ -42,12 +34,9 @@ struct RenderData {
     size: (u32, u32),
 
     last_frame_time: Instant,
-    last_frame: Frame,
+    last_frame: Option<FrameArray>,
 
-    decoding_thread_handle: OnceCell<JoinHandle<()>>,
-    frames: Arc<Mutex<BinaryHeap<Reverse<TimedFrame>>>>, // Using BinaryHeap to keep frames in order of their timestamps
-
-    shutdown: Arc<AtomicBool>,
+    decoding_pipeline: DecodingPipeline,
 }
 
 impl VideoWPRenderer {
@@ -60,19 +49,11 @@ impl VideoWPRenderer {
     }
 
     fn start_playback(&mut self) {
-        let source = video_rs::Location::File(self.video_path.as_ref().unwrap().clone());
-        //let decoder = Decoder::new(source).expect("Failed to create decoder");
+        let mut decoding_pipeline = DecodingPipeline::new(&self.video_path.clone().unwrap());
 
-        let decoder = DecoderBuilder::new(source)
-            .with_hardware_acceleration(HardwareAccelerationDeviceType::VaApi)
-            .build()
-            .expect("Failed to create decoder");
-
-        let size = decoder.size_out();
-        let framerate = decoder.frame_rate();
-
-        let shutdown_arc = Arc::new(AtomicBool::new(false));
-        let (thread_handle, frames_vec) = start_decoding_thread(decoder, shutdown_arc.clone());
+        let size = decoding_pipeline.decoder_size();
+        let framerate = decoding_pipeline.framerate();
+        decoding_pipeline.start_decoding();
 
         let ctx = self.render_context.as_mut().unwrap();
 
@@ -93,17 +74,13 @@ impl VideoWPRenderer {
                 null(),
             );
 
-            let last_frame = frames_vec.lock().unwrap().peek().unwrap().0.frame.clone();
-
             ctx.data.replace(RenderData {
                 texture,
                 framerate,
                 size,
                 last_frame_time: Instant::now(),
-                last_frame,
-                decoding_thread_handle: OnceCell::from(thread_handle),
-                frames: frames_vec,
-                shutdown: shutdown_arc,
+                last_frame: None,
+                decoding_pipeline,
             });
         }
     }
@@ -118,204 +95,41 @@ impl VideoRenderingBackend for VideoWPRenderer {
     }
 }
 
-struct TimedFrame {
-    rewind_count: u32,
-    time: Time,
-    frame: Frame,
-}
-
-impl PartialEq for TimedFrame {
-    fn eq(&self, other: &Self) -> bool {
-        self.time == other.time
-    }
-}
-
-impl Eq for TimedFrame {}
-impl Ord for TimedFrame {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        match self.rewind_count.cmp(&other.rewind_count) {
-            std::cmp::Ordering::Equal => self.time.as_secs_f64().total_cmp(&other.time.as_secs_f64()),
-            ordering => ordering,
-        }
-    }
-}
-
-impl PartialOrd for TimedFrame {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl From<TimedFrame> for Frame {
-    fn from(timed_frame: TimedFrame) -> Self {
-        timed_frame.frame
-    }
-}
-
-fn start_decoding_thread(
-    mut decoder: Decoder,
-    shutdown: Arc<AtomicBool>,
-) -> (JoinHandle<()>, Arc<Mutex<BinaryHeap<Reverse<TimedFrame>>>>) {
-    let mut frames_vec = BinaryHeap::with_capacity(THREAD_FRAME_BUFFER_SIZE);
-    let first_frame = decoder.decode().unwrap();
-    frames_vec.push(Reverse(TimedFrame {
-        rewind_count: 0,
-        time: first_frame.0,
-        frame: first_frame.1,
-    }));
-    let frames_arc = Arc::new(Mutex::new(frames_vec)); // init with first frame
-
-    let weak = Arc::downgrade(&frames_arc);
-
-    let (mut decoder_split, mut reader, stream_index) = decoder.into_parts();
-
-    let handle = thread::spawn(move || {
-        tracing::debug!("Spawn decoding thread");
-
-        let mut rewind_count: u32 = 0;
-
-        'outer: while !shutdown.load(Ordering::Relaxed) {
-            let packet_result = reader.read(stream_index);
-
-            let packet = match packet_result {
-                Ok(packet) => packet,
-                Err(err) => match err {
-                    Error::ReadExhausted => {
-                        tracing::debug!("Video ended, seeking to start");
-                        reader.seek_to_start().unwrap();
-                        rewind_count += 1;
-                        continue;
-                    }
-                    _ => panic!("Error while decoding video frame"),
-                },
-            };
-
-            let pts = packet.pts();
-            let stream_time_base = reader.input.stream(stream_index).unwrap().time_base();
-
-            let timed_frame: TimedFrame = match decoder_split
-                .decode(packet)
-                .expect("Failed to decode video frame")
-            {
-                Some((_, frame)) => TimedFrame {
-                    rewind_count,
-                    time: Time::new(pts.into_value(), stream_time_base),
-                    frame,
-                },
-                None => continue,
-            };
-
-            while !shutdown.load(Ordering::Relaxed) {
-                if let Some(strong) = weak.upgrade() {
-                    if strong.lock().unwrap().len() >= THREAD_FRAME_BUFFER_SIZE {
-                        tracing::debug!("Frames in queue >= 20, paused decoding");
-                        thread::park();
-                        tracing::debug!("Resumed decoding")
-                    } else {
-                        break;
-                    };
-                } else {
-                    break 'outer;
-                }
-            }
-
-            if let Some(strong) = weak.upgrade() {
-                let mut frames_vec = strong.lock().unwrap();
-                frames_vec.push(Reverse(timed_frame));
-            } else {
-                break 'outer;
-            }
-        }
-
-        tracing::debug!("Got out of the decoding loop, draining decoder");
-        while let Ok(Some(_)) = decoder_split.drain_raw() {
-            tracing::debug!("Draining frame");
-        }
-
-        tracing::debug!("Exited decoding Thread!");
-    });
-
-    (handle, frames_arc)
-}
-
 impl WPRendererImpl for VideoWPRenderer {
     fn init_render(&mut self) {
-        unsafe {
-            let mut vao: GLuint = 0;
-            gl::GenVertexArrays(1, &mut vao);
-            gl::BindVertexArray(vao);
+        let ebo = ElementBuffer::new(&INDICES);
+        let mut vao = VertexArray::new(ebo);
+        let mut vbo = VertexBuffer::new(&VERTEX_DATA);
 
-            let mut vbo: GLuint = 0;
-            gl::GenBuffers(1, &mut vbo);
+        vbo.add_vertex_attribute(VertexAttribute {
+            index: 0,
+            size: 3,
+            data_type: GLDataType::Float,
+            normalized: false,
+            stride: (5 * size_of::<GLfloat>()) as GLint,
+            offset: 0,
+        });
 
-            gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
-            gl::BufferData(
-                gl::ARRAY_BUFFER,
-                (VERTEX_DATA.len() * size_of::<GLfloat>()) as GLsizeiptr,
-                &VERTEX_DATA[0] as *const f32 as *const c_void,
-                gl::STATIC_DRAW,
-            );
+        vbo.add_vertex_attribute(VertexAttribute {
+            index: 1,
+            size: 2,
+            data_type: GLDataType::Float,
+            normalized: false,
+            stride: (5 * size_of::<GLfloat>()) as GLint,
+            offset: 3 * size_of::<GLfloat>(),
+        });
 
-            let vertex_shader: GLuint = compile_shader(VERTEX_SHADER_SRC, gl::VERTEX_SHADER);
-            let fragment_shader = compile_shader(FRAGMENT_SHADER_SRC, gl::FRAGMENT_SHADER);
+        vao.bind();
+        vao.bind_vertex_buffer(vbo);
+        vao.unbind();
 
-            let program = link_program(vertex_shader, fragment_shader);
+        let shader = Shader::new(VERTEX_SHADER_SRC, FRAGMENT_SHADER_SRC);
 
-            let pointer = CString::new("out_color").unwrap();
-            gl::BindFragDataLocation(program, 0, pointer.as_ptr());
-
-            gl::DeleteShader(vertex_shader);
-            gl::DeleteShader(fragment_shader);
-
-            gl::VertexAttribPointer(
-                0,
-                3,
-                gl::FLOAT,
-                gl::FALSE,
-                (8 * size_of::<GLfloat>()) as GLsizei,
-                null(),
-            );
-            gl::EnableVertexAttribArray(0);
-
-            gl::VertexAttribPointer(
-                1,
-                3,
-                gl::FLOAT,
-                gl::FALSE,
-                (8 * size_of::<GLfloat>()) as GLsizei,
-                (3 * size_of::<GLfloat>()) as *const c_void,
-            );
-            gl::EnableVertexAttribArray(1);
-
-            gl::VertexAttribPointer(
-                2,
-                2,
-                gl::FLOAT,
-                gl::FALSE,
-                (8 * size_of::<GLfloat>()) as GLsizei,
-                (6 * size_of::<GLfloat>()) as *const c_void,
-            );
-            gl::EnableVertexAttribArray(2);
-
-            let mut ebo: GLuint = 0;
-            gl::GenBuffers(1, &mut ebo);
-
-            gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, ebo);
-            gl::BufferData(
-                gl::ELEMENT_ARRAY_BUFFER,
-                (INDICES.len() * size_of::<GLfloat>()) as GLsizeiptr,
-                &INDICES[0] as *const i32 as *const c_void,
-                gl::STATIC_DRAW,
-            );
-
-            self.render_context = Some(RenderContext {
-                program,
-                vao,
-                vbo,
-                ebo,
-                data: None,
-            })
-        }
+        self.render_context = Some(RenderContext {
+            shader,
+            vao,
+            data: None,
+        })
     }
 
     fn render(&mut self, width: u32, height: u32) {
@@ -330,30 +144,48 @@ impl WPRendererImpl for VideoWPRenderer {
         let frame = if Instant::now()
             .duration_since(data.last_frame_time)
             .as_secs_f32()
-            < 1.0 / (data.framerate/10.0)
+            < 1.0 / data.framerate
         {
             tracing::debug!("Not enough time since last frame, rendering last frame again");
-            &data.last_frame
+            match data.last_frame.as_ref() {
+                Some(frame) => frame,
+                None => {
+                    tracing::warn!("No last frame available, cannot render");
+                    return;
+                }
+            }
         } else {
             data.last_frame_time = Instant::now();
 
-            let mut frames = data.frames.lock().unwrap();
+            // TODO: make this less bad
+            let mut frames = data.decoding_pipeline.frames.lock().unwrap();
 
             if frames.is_empty() || frames.len() < 16 {
                 tracing::debug!("Not enough frames in queue, rendering last frame");
-                &data.last_frame
+                match data.last_frame.as_ref() {
+                    Some(frame) => frame,
+                    None => {
+                        tracing::warn!("No last frame available, cannot render");
+                        return;
+                    }
+                }
             } else {
-                let Reverse(TimedFrame { rewind_count, time, frame }) = frames.pop().unwrap();
-                data.decoding_thread_handle.get().unwrap().thread().unpark();
+                let TimedVideoFrame {
+                    rewind_count,
+                    timestamp,
+                    frame,
+                } = frames.pop().unwrap();
+                // TODO: remove this unpark when we have a better way to handle frame rendering
+                data.decoding_pipeline.decoding_thread.as_ref().unwrap().thread().unpark();
 
                 tracing::info!(
-                        "Rendering new frame, frames in queue: {}, rewind count: {}, frame time: {}",
-                        frames.len(),
-                        rewind_count,
-                        time.as_secs_f64()
-                    );
-                data.last_frame = frame;
-                &data.last_frame
+                    "Rendering new frame, frames in queue: {}, rewind count: {}, frame time: {:?}",
+                    frames.len(),
+                    rewind_count,
+                    timestamp
+                );
+                data.last_frame = Some(frame);
+                data.last_frame.as_ref().unwrap()
             }
         };
 
@@ -361,9 +193,8 @@ impl WPRendererImpl for VideoWPRenderer {
             // Reset viewport each frame to avoid problems when rendering on two screens with different resolutions
             gl::Viewport(0, 0, width as GLsizei, height as GLsizei);
 
-            gl::BindVertexArray(ctx.vao);
-            gl::UseProgram(ctx.program);
-            gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, ctx.ebo);
+            ctx.shader.use_program();
+            ctx.vao.bind();
 
             gl::BindTexture(gl::TEXTURE_2D, data.texture);
             gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::REPEAT as GLint);
@@ -386,32 +217,15 @@ impl WPRendererImpl for VideoWPRenderer {
 
             gl::DrawElements(gl::TRIANGLES, 6, gl::UNSIGNED_INT, null::<c_void>());
 
-            gl::BindBuffer(gl::ELEMENT_ARRAY_BUFFER, 0);
-            gl::UseProgram(0);
-            gl::BindVertexArray(0);
-        }
-    }
-}
-
-impl Drop for RenderContext {
-    fn drop(&mut self) {
-        unsafe {
-            tracing::debug!("Destroying video render context");
-            gl::DeleteBuffers(1, &self.ebo);
-            gl::DeleteBuffers(1, &self.vbo);
-            gl::DeleteVertexArrays(1, &self.vao);
-            gl::DeleteProgram(self.program);
+            ctx.vao.unbind();
+            ctx.shader.unbind();
         }
     }
 }
 
 impl Drop for RenderData {
     fn drop(&mut self) {
-        self.shutdown.store(true, Ordering::Relaxed);
-        self.frames.lock().unwrap().clear();
-        self.decoding_thread_handle.get().unwrap().thread().unpark();
-
-        let _ = self.decoding_thread_handle.take().unwrap().join();
+        tracing::info!("Dropping RenderData");
         unsafe {
             gl::DeleteTextures(1, &self.texture);
         }

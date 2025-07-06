@@ -1,9 +1,7 @@
 use crate::rendering_backends::scene::scene_structs::{Material, Model, ObjectValue, Scene};
 use crate::scene_package::ScenePackage;
 use crate::tex_file::TexFile;
-use crate::wallpaper::Wallpaper;
 use crate::wallpaper_renderer::{SceneRenderingBackend, WPRendererImpl};
-use waypaper_engine_shared::project::WallpaperType;
 
 pub(crate) struct SceneWPRenderer {
     render_context: Option<RenderContext>,
@@ -25,7 +23,7 @@ struct RenderContext {
 impl WPRendererImpl for SceneWPRenderer {
     fn init_render(&mut self) {}
 
-    fn render(&mut self, width: u32, height: u32) {}
+    fn render(&mut self, _width: u32, _height: u32) {}
 
     fn clear_color(&self) -> (f32, f32, f32) {
         if let Some(render_context) = self.render_context.as_ref() {

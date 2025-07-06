@@ -2,7 +2,7 @@
 name = "waypaper_engine_daemon"
 version = "0.1.0"
 authors = ["FlashOnFire"]
-edition = "2021"
+edition = "2024"
 
 [dependencies]
 bitflags = "2.9.0"
@@ -23,6 +23,8 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 wayland-egl = "0.32.5"
 
-video-rs = { version = "0.10.3", features = ["ndarray"] }
+ffmpeg-next = { version = "7.1.0"}
+ndarray = "0.16.1"
 
 waypaper_engine_shared = {path = "../waypaper_engine_shared"}
+anyhow = "1.0.98"
