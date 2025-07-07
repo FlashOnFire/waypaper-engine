@@ -58,7 +58,7 @@ If you're trying it out, please consider it a **preview** and not a fully functi
 
 ## 📋 Requirements
 
-- Rust >1.79
+- Rust >1.88
 - A wayland compositor supporting the wlr_layer_shell protocol (tested on Hyprland and KWin)
 
 
