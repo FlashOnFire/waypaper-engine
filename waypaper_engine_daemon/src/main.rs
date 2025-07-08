@@ -14,6 +14,9 @@ mod wallpaper_renderer;
 mod wl_renderer;
 mod rendering_backends;
 
+#[global_allocator]
+static ALLOC: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
+
 fn main() -> Result<(), Box<dyn Error>> {
     tracing_subscriber::fmt()
         .with_env_filter(

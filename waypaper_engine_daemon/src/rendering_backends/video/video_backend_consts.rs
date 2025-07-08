@@ -1,6 +1,7 @@
 use gl::types::{GLfloat, GLint};
 
 pub(crate) const THREAD_FRAME_BUFFER_SIZE: usize = 20;
+pub(crate) const FRAME_POOL_SIZE: usize = 25;
 
 #[rustfmt::skip]
 pub(crate) const VERTEX_DATA: [GLfloat; 20] = [

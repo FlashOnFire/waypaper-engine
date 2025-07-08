@@ -171,11 +171,11 @@ impl VideoDecoder {
 
     pub fn process_decoded_frames(
         &mut self,
-        frames: Vec<VideoFrame>,
+        mut frames: Vec<VideoFrame>,
     ) -> anyhow::Result<Vec<VideoFrame>> {
         let mut processed_frames = Vec::with_capacity(frames.len());
 
-        for frame in frames {
+        for frame in frames.drain(..) {
             let processed_frame = self.process_decoded_frame(frame)?;
             processed_frames.push(processed_frame);
         }
@@ -210,24 +210,30 @@ impl VideoDecoder {
         Ok(scaled_frame)
     }
 
+    pub(crate) fn flush(&mut self) {
+        tracing::info!("Flushing decoder");
+        self.drain();
+        self.decoder.flush();
+        tracing::info!("Decoder flushed");
+    }
+
     pub fn drain(&mut self) {
-        tracing::debug!("Draining decoder");
+        tracing::info!("Draining decoder");
         self.decoder.send_eof().unwrap();
         let mut count = 0;
         let mut decoded = VideoFrame::empty();
 
         //TODO flush interlacing filter at the end of the stream if set
-
         loop {
-            if self.decoder.receive_frame(&mut decoded).is_err() {
-                count += 1;
-                if count > 3 {
-                    break;
-                }
+            let result = self.decoder.receive_frame(&mut decoded);
+            if let Err(e) = result && e == Error::Eof {
+                break;
             }
+            count += 1;
+            decoded = VideoFrame::empty(); // Reset the frame to ensure the previous data is dropped
         }
 
-        tracing::debug!("Decoder drained");
+        tracing::info!("Decoder drained ({} frames)", count);
     }
 }
 
