@@ -73,97 +73,100 @@ impl AppState {
             self.rendering_context.tick();
 
             match rx.try_recv() {
-                Ok((req, response)) => {
-                    match req {
-                        IPCRequest::SetWallpaper { id, screen } => {
-                            let outputs = self.rendering_context.get_outputs();
+                Ok((req, response)) => match req {
+                    IPCRequest::SetWallpaper { id, screen } => {
+                        let outputs = self.rendering_context.get_outputs();
 
-                            if let Some(output) = outputs
-                                .iter()
-                                .find(|output| output.1.name.as_ref().unwrap() == &screen)
-                            {
-                                let path = self.wpe_dir.join(id.to_string());
+                        if let Some(output) = outputs
+                            .iter()
+                            .find(|output| output.1.name.as_ref().unwrap() == &screen)
+                        {
+                            let path = self.wpe_dir.join(id.to_string());
 
-                                if !path.exists() {
-                                    tracing::warn!("Wallpaper path does not exist: {:?}", path);
-                                    response
-                                        .send(IPCResponse::Error(IPCError::WallpaperNotFound))
-                                        .unwrap();
-                                    continue;
-                                }
-
-                                if !path.is_dir() {
-                                    tracing::warn!("Wallpaper path is not a directory: {:?}", path);
-                                    response
-                                        .send(IPCResponse::Error(IPCError::WallpaperNotFound))
-                                        .unwrap();
-                                    continue;
-                                }
-
-                                let wallpaper = Wallpaper::new(path)?;
-                                let path = self.wpe_dir.join(id.to_string());
-                                match wallpaper {
-                                    Wallpaper::Video { ref project, .. } => {
-                                        let video_path = path.join(project.file.as_ref().unwrap());
-
-                                        if video_path.exists() {
-                                            tracing::info!(
-                                                "Found video file ! (Path : {video_path:?})"
-                                            );
-
-                                            self.rendering_context.set_wallpaper(output, wallpaper);
-                                        }
-                                    }
-                                    Wallpaper::Scene { .. } => {
-                                        let scene_pkg_file = path.join("scene.pkg");
-
-                                        if scene_pkg_file.exists() {
-                                            tracing::info!("Found scene package file ! (Path : {scene_pkg_file:?})");
-
-                                            self.rendering_context.set_wallpaper(output, wallpaper);
-                                        }
-                                    }
-                                    _ => {
-                                        tracing::warn!("Unsupported wallpaper type for SetWallpaper request: [{}]", screen);
-                                        response
-                                            .send(IPCResponse::Error(
-                                                IPCError::UnsupportedWallpaperType,
-                                            ))
-                                            .unwrap();
-                                        continue;
-                                    }
-                                }
-
-                                tracing::info!(
-                                    "Set wallpaper for output [{}] with id [{}]",
-                                    screen,
-                                    id
-                                );
-                                response.send(IPCResponse::Success).unwrap();
-                            } else {
-                                tracing::warn!(
-                                    "Received wrong output in SetWallpaper request: [{}]",
-                                    screen
-                                );
+                            if !path.exists() {
+                                tracing::warn!("Wallpaper path does not exist: {:?}", path);
                                 response
-                                    .send(IPCResponse::Error(IPCError::ScreenNotFound))
+                                    .send(IPCResponse::Error(IPCError::WallpaperNotFound))
                                     .unwrap();
+                                continue;
                             }
-                        }
-                        IPCRequest::ListOutputs => {
-                            let outputs = self
-                                .rendering_context
-                                .get_outputs()
-                                .drain()
-                                .filter_map(|(_, output)| output.name)
-                                .collect();
-                            response.send(IPCResponse::Outputs(outputs)).unwrap();
-                        }
-                        IPCRequest::KillDaemon => {
-                            unreachable!() 
+
+                            if !path.is_dir() {
+                                tracing::warn!("Wallpaper path is not a directory: {:?}", path);
+                                response
+                                    .send(IPCResponse::Error(IPCError::WallpaperNotFound))
+                                    .unwrap();
+                                continue;
+                            }
+
+                            let wallpaper = Wallpaper::new(path)?;
+                            let path = self.wpe_dir.join(id.to_string());
+                            match wallpaper {
+                                Wallpaper::Video { ref project, .. } => {
+                                    let video_path = path.join(project.file.as_ref().unwrap());
+
+                                    if video_path.exists() {
+                                        tracing::info!(
+                                            "Found video file ! (Path : {video_path:?})"
+                                        );
+
+                                        self.rendering_context.set_wallpaper(output, wallpaper);
+                                    }
+                                }
+                                Wallpaper::Scene { .. } => {
+                                    let scene_pkg_file = path.join("scene.pkg");
+
+                                    if scene_pkg_file.exists() {
+                                        tracing::info!(
+                                            "Found scene package file ! (Path : {scene_pkg_file:?})"
+                                        );
+
+                                        self.rendering_context.set_wallpaper(output, wallpaper);
+                                    }
+                                }
+                                _ => {
+                                    tracing::warn!(
+                                        "Unsupported wallpaper type for SetWallpaper request: [{}]",
+                                        screen
+                                    );
+                                    response
+                                        .send(IPCResponse::Error(
+                                            IPCError::UnsupportedWallpaperType,
+                                        ))
+                                        .unwrap();
+                                    continue;
+                                }
+                            }
+
+                            tracing::info!(
+                                "Set wallpaper for output [{}] with id [{}]",
+                                screen,
+                                id
+                            );
+                            response.send(IPCResponse::Success).unwrap();
+                        } else {
+                            tracing::warn!(
+                                "Received wrong output in SetWallpaper request: [{}]",
+                                screen
+                            );
+                            response
+                                .send(IPCResponse::Error(IPCError::ScreenNotFound))
+                                .unwrap();
                         }
                     }
-                }
+                    IPCRequest::ListOutputs => {
+                        let outputs = self
+                            .rendering_context
+                            .get_outputs()
+                            .drain()
+                            .filter_map(|(_, output)| output.name)
+                            .collect();
+                        response.send(IPCResponse::Outputs(outputs)).unwrap();
+                    }
+                    IPCRequest::KillDaemon => {
+                        unreachable!()
+                    }
+                },
                 Err(err) => match err {
                     TryRecvError::Empty => {}
                     TryRecvError::Disconnected => break, // Daemon stopped

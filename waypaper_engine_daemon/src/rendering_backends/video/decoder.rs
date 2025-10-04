@@ -156,8 +156,8 @@ impl VideoDecoder {
                 //     Ok(Some(processed_frames))
                 // Note to self: if we want to support deinterlacing, we need to flush the deinterlacer at the end of the stream
                 // } else {
-                    let processed_frame = self.process_decoded_frame(decoded)?;
-                    Ok(Some(vec![processed_frame]))
+                let processed_frame = self.process_decoded_frame(decoded)?;
+                Ok(Some(vec![processed_frame]))
                 // }
             }
             Err(Error::Eof) => Err(anyhow!("Read exhausted")),
