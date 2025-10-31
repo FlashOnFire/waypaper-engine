@@ -9,7 +9,7 @@ use smithay_client_toolkit::output::OutputInfo;
 use smithay_client_toolkit::reexports::client::globals::{registry_queue_init, GlobalList};
 use smithay_client_toolkit::reexports::client::protocol::wl_output::WlOutput;
 use smithay_client_toolkit::reexports::client::protocol::wl_surface::WlSurface;
-use smithay_client_toolkit::reexports::client::protocol::{wl_output, wl_seat, wl_surface};
+use smithay_client_toolkit::reexports::client::protocol::{wl_output, wl_seat};
 use smithay_client_toolkit::reexports::client::{Connection, EventQueue, Proxy, QueueHandle};
 use smithay_client_toolkit::shell::wlr_layer::Anchor;
 use smithay_client_toolkit::{
@@ -27,8 +27,9 @@ use smithay_client_toolkit::{
         WaylandSurface,
     },
 };
+use smithay_client_toolkit::compositor::Surface;
 use wayland_egl::WlEglSurface;
-
+use crate::egl;
 use crate::egl::EGLState;
 use crate::wallpaper::Wallpaper;
 use crate::wallpaper_renderer::WPRenderer;
@@ -66,8 +67,23 @@ impl RenderingContext {
     }
 
     pub fn tick(&mut self) {
-        // FIXME: roundtrip is probably overkill but we can't use blocking_dispatch and dispatch_pending causes frame drops
-        self.event_queue.roundtrip(&mut self.wl_state).unwrap();
+        let dispatched = self.event_queue
+            .dispatch_pending(&mut self.wl_state)
+            .expect("Failed to dispatch wayland events");
+
+        if dispatched > 0 {
+            return; // If we have dispatched some events, we don't need to do anything else
+        }
+
+        self.event_queue.flush().expect("Failed to flush wayland event queue");
+
+        if let Some(guard) = self.event_queue.prepare_read() {
+            guard.read().expect("Failed to read wayland events");
+        }
+
+        self.event_queue
+            .dispatch_pending(&mut self.wl_state)
+            .expect("Failed to dispatch wayland events");
 
         /*if self.wl_state.layers.values().any(|layer| layer.exit) {
             tracing::debug!("Exiting");
@@ -142,7 +158,7 @@ impl WLState {
     }
 
     pub fn setup_layer(&mut self, output: (&WlOutput, &OutputInfo)) -> &mut SimpleLayer {
-        let surface: smithay_client_toolkit::compositor::Surface = self
+        let surface: Surface = self
             .compositor_state
             .create_surface(&self.queue_handle)
             .into();
@@ -262,7 +278,6 @@ pub struct SimpleLayer {
     //keyboard: Option<wl_keyboard::WlKeyboard>,
     //keyboard_focus: bool,
     //pointer: Option<wl_pointer::WlPointer>,
-    //mpv_renderer: MpvRenderer,
     egl_state: Rc<EGLState>,
     _wl_egl_surface: WlEglSurface,
     egl_window_surface: khronos_egl::Surface,
@@ -278,7 +293,7 @@ impl CompositorHandler for WLState {
         &mut self,
         _conn: &Connection,
         _qh: &QueueHandle<Self>,
-        _surface: &wl_surface::WlSurface,
+        _surface: &WlSurface,
         _new_factor: i32,
     ) {
     }
@@ -287,7 +302,7 @@ impl CompositorHandler for WLState {
         &mut self,
         _conn: &Connection,
         _qh: &QueueHandle<Self>,
-        _surface: &wl_surface::WlSurface,
+        _surface: &WlSurface,
         _new_transform: wl_output::Transform,
     ) {
     }
@@ -296,7 +311,7 @@ impl CompositorHandler for WLState {
         &mut self,
         _conn: &Connection,
         qh: &QueueHandle<Self>,
-        surface: &wl_surface::WlSurface,
+        surface: &WlSurface,
         _time: u32,
     ) {
         if let Some(layer) = self
@@ -340,7 +355,6 @@ impl OutputHandler for WLState {
 
     fn output_destroyed(&mut self, _conn: &Connection, _qh: &QueueHandle<Self>, output: WlOutput) {
         if let Some(layer) = self.layers.values().find(|layer| layer.output.0 == output) {
-            // TODO : test this
             self.layers
                 .remove(&layer.output.1.name.clone().unwrap())
                 .unwrap();

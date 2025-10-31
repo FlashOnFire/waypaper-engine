@@ -1,19 +1,20 @@
 use std::cmp::{Ordering, Reverse};
 use std::collections::BinaryHeap;
+use crate::rendering_backends::video::frame_pool::FramePoolHandle;
 use crate::rendering_backends::video::utils::FrameArray;
 
 pub struct TimedVideoFrame {
+    pub(crate) frame: FramePoolHandle,
     pub(crate) rewind_count: u32,
-    pub(crate) frame: FrameArray,
     pub(crate) timestamp: f32,
 }
 
 impl TimedVideoFrame {
-    pub fn new(frame: FrameArray, timestamp: f32, rewind_count: u32) -> Self {
+    pub fn new(frame: FramePoolHandle, timestamp: f32, rewind_count: u32) -> Self {
         Self {
+            frame,
             rewind_count,
             timestamp,
-            frame,
         }
     }
 }
@@ -65,6 +66,8 @@ where
             tracing::warn!("Frame already exists in the queue, skipping push");
             return;
         }
+
+        tracing::info!("capacity: {}, len: {}", self.frames.capacity(), self.frames.len());
 
         self.frames.push(Reverse(frame));
     }

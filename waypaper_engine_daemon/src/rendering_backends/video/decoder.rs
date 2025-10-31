@@ -171,11 +171,11 @@ impl VideoDecoder {
 
     pub fn process_decoded_frames(
         &mut self,
-        frames: Vec<VideoFrame>,
+        mut frames: Vec<VideoFrame>,
     ) -> anyhow::Result<Vec<VideoFrame>> {
         let mut processed_frames = Vec::with_capacity(frames.len());
 
-        for frame in frames {
+        for frame in frames.drain(..) {
             let processed_frame = self.process_decoded_frame(frame)?;
             processed_frames.push(processed_frame);
         }
@@ -210,24 +210,47 @@ impl VideoDecoder {
         Ok(scaled_frame)
     }
 
+    pub(crate) fn flush(&mut self) {
+        tracing::info!("Flushing decoder");
+        self.drain();
+        self.decoder.flush();
+        tracing::info!("Decoder flushed");
+    }
+
     pub fn drain(&mut self) {
-        tracing::debug!("Draining decoder");
+        tracing::info!("Draining decoder");
         self.decoder.send_eof().unwrap();
         let mut count = 0;
         let mut decoded = VideoFrame::empty();
+        const MAX_DRAIN_ITERATIONS: u32 = 50;
 
         //TODO flush interlacing filter at the end of the stream if set
-
         loop {
-            if self.decoder.receive_frame(&mut decoded).is_err() {
-                count += 1;
-                if count > 3 {
+            let result = self.decoder.receive_frame(&mut decoded);
+
+            match result {
+                Ok(_) => {
+                    count += 1;
+                    decoded = VideoFrame::empty(); // Reset the frame to ensure the previous data is dropped
+                }
+                Err(Error::Eof) => {
+                    // Normal end of stream
+                    break;
+                }
+                Err(e) => {
+                    // Any other error - log it and stop draining
+                    tracing::warn!("Error during drain: {:?}, stopping drain", e);
                     break;
                 }
             }
+
+            if count >= MAX_DRAIN_ITERATIONS {
+                tracing::error!("Drain exceeded maximum iterations ({}), forcing stop", MAX_DRAIN_ITERATIONS);
+                break;
+            }
         }
 
-        tracing::debug!("Decoder drained");
+        tracing::info!("Decoder drained ({} frames)", count);
     }
 }
 

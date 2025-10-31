@@ -1,12 +1,12 @@
 use crate::rendering_backends::video::decoder::VideoDecoder;
 use crate::rendering_backends::video::demuxer::{Demuxer, Packet};
 use crate::rendering_backends::video::frames::{OrderedFramesContainer, TimedVideoFrame};
-use crate::rendering_backends::video::utils;
-use crate::rendering_backends::video::video_backend_consts::THREAD_FRAME_BUFFER_SIZE;
+use crate::rendering_backends::video::video_backend_consts::{FRAME_POOL_SIZE, THREAD_FRAME_BUFFER_SIZE};
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
+use crate::rendering_backends::video::frame_pool::FramePool;
 
 // TODO: remove these arc mutexes and use channels instead
 pub struct DecodingPipeline {
@@ -55,100 +55,122 @@ impl DecodingPipeline {
 
         self.decoding_thread = Some(thread::spawn(move || {
             let mut rewind_count: u32 = 0;
-                'outer: while !shutdown_flag.load(Ordering::Relaxed) {
-                    let mut demuxer = demuxer.lock().unwrap();
-                    let packet = loop {
-                        let packet_result: Option<Packet> = demuxer.read();
+            let mut width = 0;
+            let mut height = 0;
+            {
+                let video_decoder = video_decoder.lock().unwrap();
+                (width, height) = video_decoder.size();
+            }
 
-                        match packet_result {
-                            Some(timed_packet) => match timed_packet {
-                                Packet::Video(packet) => break packet,
-                                _ => continue, // Skip non-video packets
-                            },
-                            None => {
-                                tracing::debug!("Video ended, seeking to start");
-                                demuxer.seek_to_start().unwrap();
-                                rewind_count += 1;
-                                continue;
-                            }
-                        };
+            let mut frame_pool = FramePool::new(
+                width as usize,
+                height as usize,
+                FRAME_POOL_SIZE,
+            );
+
+            'outer: while !shutdown_flag.load(Ordering::Relaxed) {
+                let mut demuxer = demuxer.lock().unwrap();
+                let mut video_decoder = video_decoder.lock().unwrap();
+
+                let packet = loop {
+                    let packet_result: Option<Packet> = demuxer.read();
+
+                    match packet_result {
+                        Some(timed_packet) => match timed_packet {
+                            Packet::Video(packet) => break packet,
+                            _ => continue, // Skip non-video packets
+                        },
+                        None => {
+                            tracing::debug!("Video ended, seeking to start");
+                            demuxer.seek_to_start().unwrap();
+                            rewind_count += 1;
+                            video_decoder.flush();
+                            continue;
+                        }
                     };
+                };
 
-                    tracing::debug!(
+                tracing::debug!(
                         "Decoding packet with PTS: {}, pkt time base: {:?}",
                         packet.pts().unwrap(),
                         packet.time_base()
                     );
 
-                    // Feed the packet to the video decoder
-                    let mut video_decoder = video_decoder.lock().unwrap();
-                    if let Err(e) = video_decoder.feed(packet) {
-                        tracing::error!("Failed to feed packet to video decoder: {}", e);
-                        continue;
-                    }
+                // Feed the packet to the video decoder
+                if let Err(e) = video_decoder.feed(packet) {
+                    tracing::error!("Failed to feed packet to video decoder: {}", e);
+                    continue;
+                }
 
-                    let timed_frames = match video_decoder.receive_frames() {
-                        Ok(Some(frames)) => {
-                            tracing::debug!("Received {} frames from video decoder", frames.len());
+                let timed_frames = match video_decoder.receive_frames() {
+                    Ok(Some(frames)) => {
+                        tracing::debug!("Received {} frames from video decoder", frames.len());
 
-                            frames.into_iter().map(|mut frame| {
-                                let timestamp = frame.timestamp().or(frame.pts()).unwrap_or(0);
+                        frames.into_iter().filter_map(|mut frame| {
+                            let timestamp = frame.timestamp().or(frame.pts()).unwrap_or(0);
 
-                                let tb = video_decoder.stream_time_base();
-                                let tf = TimedVideoFrame::new(
-                                    utils::convert_frame_to_ndarray_rgb24(&mut frame).unwrap(),
-                                    timestamp as f32
-                                        * (tb.numerator() as f32 / tb.denominator() as f32),
-                                    rewind_count,
-                                );
+                            let tb = video_decoder.stream_time_base();
 
-                                tracing::debug!(
+                            let mut buffer = frame_pool.get_buffer();
+                            if let Err(e) = buffer.fill_with(&mut frame) {
+                                tracing::error!("Failed to convert frame data to rgb24: {}", e);
+                                return None;
+                            }
+
+                            let tf = TimedVideoFrame::new(
+                                buffer,
+                                timestamp as f32
+                                    * (tb.numerator() as f32 / tb.denominator() as f32),
+                                rewind_count,
+                            );
+
+                            tracing::debug!(
                                     "Converted frame to ndarray, size: {}x{}, rewind count: {}, frame time: {:?}",
                                     frame.width(),
                                     frame.height(),
                                     tf.rewind_count,
                                     tf.timestamp
                                 );
-                                tf
-                            }).collect::<Vec<_>>()
-                        }
-                        Ok(None) => {
-                            tracing::debug!("No frame received, waiting for more data");
-                            continue;
-                        }
-                        Err(e) => {
-                            tracing::error!("Failed to decode video frame: {}", e);
-                            continue;
-                        }
-                    };
-
-                    while !shutdown_flag.load(Ordering::Relaxed) {
-                        if let Some(strong) = weak.upgrade() {
-                            if strong.lock().unwrap().len() >= THREAD_FRAME_BUFFER_SIZE {
-                                tracing::debug!("Frames in queue >= 20, paused decoding");
-                                thread::park();
-                                tracing::debug!("Resumed decoding")
-                            } else {
-                                break;
-                            };
-                        } else {
-                            break 'outer;
-                        }
+                            Some(tf)
+                        }).collect::<Vec<_>>()
                     }
+                    Ok(None) => {
+                        tracing::debug!("No frame received, waiting for more data");
+                        continue;
+                    }
+                    Err(e) => {
+                        tracing::error!("Failed to decode video frame: {}", e);
+                        continue;
+                    }
+                };
 
+                while !shutdown_flag.load(Ordering::Relaxed) {
                     if let Some(strong) = weak.upgrade() {
-                        let mut frames_vec = strong.lock().unwrap();
-                        let nb_new_frames = timed_frames.len();
-                        frames_vec.extend(timed_frames);
-                        tracing::debug!(
-                            "Added {} frames to the queue, total frames in queue: {}",
-                            nb_new_frames,
-                            frames_vec.len()
-                        );
+                        if strong.lock().unwrap().len() >= THREAD_FRAME_BUFFER_SIZE {
+                            tracing::debug!("Frames in queue >= 20, paused decoding");
+                            thread::park();
+                            tracing::debug!("Resumed decoding")
+                        } else {
+                            break;
+                        };
                     } else {
                         break 'outer;
                     }
                 }
+
+                if let Some(strong) = weak.upgrade() {
+                    let mut frames_vec = strong.lock().unwrap();
+                    let nb_new_frames = timed_frames.len();
+                    frames_vec.extend(timed_frames);
+                    tracing::debug!(
+                            "Added {} frames to the queue, total frames in queue: {}",
+                            nb_new_frames,
+                            frames_vec.len()
+                        );
+                } else {
+                    break 'outer;
+                }
+            }
             tracing::info!("Decoding thread stopped");
             video_decoder.lock().unwrap().drain();
         }));

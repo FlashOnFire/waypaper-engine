@@ -7,3 +7,4 @@ mod pipeline;
 mod utils;
 mod video_backend_consts;
 pub(crate) mod video_wp_renderer;
+mod frame_pool;

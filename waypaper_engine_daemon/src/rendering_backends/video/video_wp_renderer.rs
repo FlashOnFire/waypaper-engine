@@ -13,6 +13,7 @@ use std::ffi::c_void;
 use std::path::PathBuf;
 use std::ptr::null;
 use std::time::Instant;
+use crate::rendering_backends::video::frame_pool::FramePoolHandle;
 
 pub struct VideoWPRenderer {
     render_context: Option<RenderContext>,
@@ -34,7 +35,7 @@ struct RenderData {
     size: (u32, u32),
 
     last_frame_time: Instant,
-    last_frame: Option<FrameArray>,
+    last_frame: Option<FramePoolHandle>,
 
     decoding_pipeline: DecodingPipeline,
 }
@@ -150,7 +151,7 @@ impl WPRendererImpl for VideoWPRenderer {
             match data.last_frame.as_ref() {
                 Some(frame) => frame,
                 None => {
-                    tracing::warn!("No last frame available, cannot render");
+                    //tracing::info!("No last frame available, cannot render");
                     return;
                 }
             }
@@ -165,7 +166,7 @@ impl WPRendererImpl for VideoWPRenderer {
                 match data.last_frame.as_ref() {
                     Some(frame) => frame,
                     None => {
-                        tracing::warn!("No last frame available, cannot render");
+                        //tracing::info!("No last frame available, cannot render");
                         return;
                     }
                 }
@@ -212,7 +213,7 @@ impl WPRendererImpl for VideoWPRenderer {
                 tex_height as GLsizei,
                 gl::RGB,
                 gl::UNSIGNED_BYTE,
-                frame.as_ptr() as *const c_void,
+                frame.buffer().as_ptr() as *const c_void,
             );
 
             gl::DrawElements(gl::TRIANGLES, 6, gl::UNSIGNED_INT, null::<c_void>());
