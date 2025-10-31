@@ -6,17 +6,16 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
-[build-dependencies]
-tauri-build = { version = "2", features = [] }
-
 [dependencies]
-tauri = { version = "2", features = [] }
-tauri-plugin-shell = "2"
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+anyhow = "1.0"
 base64 = "0.22.1"
 linux-ipc = "0.2.1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tauri = { version = "2.9.2", features = [] }
+tauri-plugin-shell = "2.3.3"
+waypaper_engine_shared = { path = "../../waypaper_engine_shared" }
 xrandr-parser = "0.3.0"
-anyhow = "1.0"
 
-waypaper_engine_shared = {path = "../../waypaper_engine_shared"}
+[build-dependencies]
+tauri-build = { version = "2.5.1", features = [] }
