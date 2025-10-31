@@ -1,17 +1,20 @@
 use std::ffi::c_void;
 use std::rc::Rc;
 
-use khronos_egl as egl;
-use khronos_egl::{Config, Context, Display, Instance, Static, Surface};
+use khronos_egl::{self as egl, Dynamic};
+use khronos_egl::{Config, Context, Display, Instance, Surface};
 use smithay_client_toolkit::reexports::client::Connection;
 
-pub fn get_proc_address(egl: &Rc<Instance<Static>>, name: &str) -> *mut c_void {
+pub fn get_proc_address(
+    egl: &Rc<Instance<Dynamic<libloading::Library, egl::EGL1_5>>>,
+    name: &str,
+) -> *mut c_void {
     egl.get_proc_address(name).unwrap() as *mut c_void
 }
 
 pub struct EGLState {
     _wl_connection: Rc<Connection>,
-    pub(crate) egl: Rc<Instance<Static>>,
+    pub(crate) egl: Rc<Instance<Dynamic<libloading::Library, egl::EGL1_5>>>,
     pub(crate) egl_display: Display,
     pub(crate) egl_context: Context,
     pub(crate) config: Config,
@@ -19,12 +22,19 @@ pub struct EGLState {
 
 impl EGLState {
     pub fn new(connection: Rc<Connection>) -> Self {
-        let egl = Rc::new(Instance::new(Static));
+        let lib =
+            unsafe { libloading::Library::new("libEGL.so.1").expect("unable to find libEGL.so.1") };
+        let egl = unsafe {
+            egl::DynamicInstance::<egl::EGL1_5>::load_required_from(lib)
+                .expect("unable to load libEGL.so.1")
+        };
+
+        let egl = Rc::new(egl);
 
         unsafe {
             let egl_display = egl
                 .get_display(connection.backend().display_ptr() as *mut c_void)
-                .unwrap();
+                .expect("Failed to get EGL Display");
             egl.initialize(egl_display)
                 .expect("Couldn't initialize EGL Display");
 
