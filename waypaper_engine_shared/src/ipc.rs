@@ -11,7 +11,7 @@ pub enum IPCRequest {
 pub enum IPCResponse {
     Success,
     Outputs(Vec<String>),
-    Error(IPCError)
+    Error(IPCError),
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -21,4 +21,3 @@ pub enum IPCError {
     UnsupportedWallpaperType,
     InternalError,
 }
-

@@ -1,10 +1,10 @@
-use std::{fs, io};
+use crate::file_reading_utils::{read_str, read_u32};
 use std::collections::HashMap;
 use std::fs::create_dir_all;
 use std::io::{Cursor, Read, Seek};
 use std::path::{Path, PathBuf};
+use std::{fs, io};
 use tracing::Level;
-use crate::file_reading_utils::{read_str, read_u32};
 
 #[derive(Debug, Clone)]
 pub struct FileEntry {
@@ -60,11 +60,16 @@ impl ScenePackage {
                     format!("{} Mb ", entry.size % 100000000).to_string()
                 } else if entry.size > 1000 {
                     format!("{} Kb ", entry.size % 1000).to_string()
-                } else{
+                } else {
                     format!("{} b", entry.size).to_string()
                 };
-                
-                tracing::debug!("\tName: {} - Offset: {}, Size: {}", entry.name, entry.offset, formatted_size);
+
+                tracing::debug!(
+                    "\tName: {} - Offset: {}, Size: {}",
+                    entry.name,
+                    entry.offset,
+                    formatted_size
+                );
             }
             contents.insert(
                 entry.name.clone(),
@@ -94,7 +99,7 @@ impl ScenePackage {
 
         Ok(())
     }
-    
+
     pub fn get_file(&self, name: &str) -> Option<&FileContent> {
         self.contents.get(name)
     }
@@ -102,10 +107,17 @@ impl ScenePackage {
 
 fn read_header(data: &mut Cursor<Vec<u8>>) -> u32 {
     let version = read_str(data);
-    assert!(version.starts_with("PKGV"), "Error reading PKG file header: {}", version);
-    
+    assert!(
+        version.starts_with("PKGV"),
+        "Error reading PKG file header: {}",
+        version
+    );
+
     if version != "PKGV0001" {
-        tracing::warn!("Trying to unpack unsupported PKG file version: {}, if you encounter bugs please report them on the git repository", version);
+        tracing::warn!(
+            "Trying to unpack unsupported PKG file version: {}, if you encounter bugs please report them on the git repository",
+            version
+        );
     }
 
     let file_count = read_u32(data);

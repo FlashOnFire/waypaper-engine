@@ -1,12 +1,14 @@
 use crate::rendering_backends::video::decoder::VideoDecoder;
 use crate::rendering_backends::video::demuxer::{Demuxer, Packet};
+use crate::rendering_backends::video::frame_pool::FramePool;
 use crate::rendering_backends::video::frames::{OrderedFramesContainer, TimedVideoFrame};
-use crate::rendering_backends::video::video_backend_consts::{FRAME_POOL_SIZE, THREAD_FRAME_BUFFER_SIZE};
+use crate::rendering_backends::video::video_backend_consts::{
+    FRAME_POOL_SIZE, THREAD_FRAME_BUFFER_SIZE,
+};
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
-use crate::rendering_backends::video::frame_pool::FramePool;
 
 // TODO: remove these arc mutexes and use channels instead
 pub struct DecodingPipeline {
@@ -62,11 +64,7 @@ impl DecodingPipeline {
                 (width, height) = video_decoder.size();
             }
 
-            let mut frame_pool = FramePool::new(
-                width as usize,
-                height as usize,
-                FRAME_POOL_SIZE,
-            );
+            let mut frame_pool = FramePool::new(width as usize, height as usize, FRAME_POOL_SIZE);
 
             'outer: while !shutdown_flag.load(Ordering::Relaxed) {
                 let mut demuxer = demuxer.lock().unwrap();
@@ -91,10 +89,10 @@ impl DecodingPipeline {
                 };
 
                 tracing::debug!(
-                        "Decoding packet with PTS: {}, pkt time base: {:?}",
-                        packet.pts().unwrap(),
-                        packet.time_base()
-                    );
+                    "Decoding packet with PTS: {}, pkt time base: {:?}",
+                    packet.pts().unwrap(),
+                    packet.time_base()
+                );
 
                 // Feed the packet to the video decoder
                 if let Err(e) = video_decoder.feed(packet) {
@@ -163,10 +161,10 @@ impl DecodingPipeline {
                     let nb_new_frames = timed_frames.len();
                     frames_vec.extend(timed_frames);
                     tracing::debug!(
-                            "Added {} frames to the queue, total frames in queue: {}",
-                            nb_new_frames,
-                            frames_vec.len()
-                        );
+                        "Added {} frames to the queue, total frames in queue: {}",
+                        nb_new_frames,
+                        frames_vec.len()
+                    );
                 } else {
                     break 'outer;
                 }

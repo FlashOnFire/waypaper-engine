@@ -2,8 +2,7 @@ use std::error::Error;
 use std::path::PathBuf;
 use std::str::FromStr;
 
-
-use waypaper_engine_shared::project::{WallpaperType, WEProject};
+use waypaper_engine_shared::project::{WEProject, WallpaperType};
 
 use crate::scene_package::ScenePackage;
 
@@ -25,9 +24,7 @@ pub enum Wallpaper {
 }
 
 impl Wallpaper {
-    pub fn new(
-        path: PathBuf,
-    ) -> Result<Wallpaper, Box<dyn Error>> {
+    pub fn new(path: PathBuf) -> Result<Wallpaper, Box<dyn Error>> {
         let project = WEProject::new(
             &path.join("project.json"),
             u64::from_str(path.file_name().unwrap().to_str().unwrap()).unwrap(),
@@ -55,7 +52,7 @@ impl Wallpaper {
             WallpaperType::Preset => Wallpaper::Preset { project },
         })
     }
-    
+
     pub fn wp_type(&self) -> WallpaperType {
         match self {
             Wallpaper::Video { .. } => WallpaperType::Video,

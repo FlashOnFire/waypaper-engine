@@ -120,7 +120,7 @@ pub struct Model {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Material {
-    pub passes: Vec<Passes>
+    pub passes: Vec<Passes>,
 }
 
 #[derive(Debug, Clone, Deserialize)]

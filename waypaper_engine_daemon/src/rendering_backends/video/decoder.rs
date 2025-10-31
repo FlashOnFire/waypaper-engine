@@ -245,7 +245,10 @@ impl VideoDecoder {
             }
 
             if count >= MAX_DRAIN_ITERATIONS {
-                tracing::error!("Drain exceeded maximum iterations ({}), forcing stop", MAX_DRAIN_ITERATIONS);
+                tracing::error!(
+                    "Drain exceeded maximum iterations ({}), forcing stop",
+                    MAX_DRAIN_ITERATIONS
+                );
                 break;
             }
         }

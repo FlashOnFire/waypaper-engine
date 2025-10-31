@@ -1,3 +1,4 @@
+use crate::rendering_backends::video::frame_pool::FramePoolHandle;
 use crate::rendering_backends::video::frames::TimedVideoFrame;
 use crate::rendering_backends::video::gl::{
     ElementBuffer, GLDataType, Shader, VertexArray, VertexAttribute, VertexBuffer,
@@ -13,7 +14,6 @@ use std::ffi::c_void;
 use std::path::PathBuf;
 use std::ptr::null;
 use std::time::Instant;
-use crate::rendering_backends::video::frame_pool::FramePoolHandle;
 
 pub struct VideoWPRenderer {
     render_context: Option<RenderContext>,
@@ -177,7 +177,12 @@ impl WPRendererImpl for VideoWPRenderer {
                     frame,
                 } = frames.pop().unwrap();
                 // TODO: remove this unpark when we have a better way to handle frame rendering
-                data.decoding_pipeline.decoding_thread.as_ref().unwrap().thread().unpark();
+                data.decoding_pipeline
+                    .decoding_thread
+                    .as_ref()
+                    .unwrap()
+                    .thread()
+                    .unpark();
 
                 tracing::info!(
                     "Rendering new frame, frames in queue: {}, rewind count: {}, frame time: {:?}",

@@ -1,7 +1,7 @@
-use std::ffi::{c_void, CString};
+use gl::types::{GLchar, GLenum, GLint};
+use std::ffi::{CString, c_void};
 use std::ptr;
 use std::str::from_utf8;
-use gl::types::{GLchar, GLenum, GLint};
 
 pub struct VertexArray {
     id: u32,
@@ -15,7 +15,11 @@ impl VertexArray {
         unsafe {
             gl::GenVertexArrays(1, &mut id);
         }
-        let vao = Self { id, ebo, vbos: Vec::new() };
+        let vao = Self {
+            id,
+            ebo,
+            vbos: Vec::new(),
+        };
 
         vao.bind();
         vao.ebo.bind();
@@ -79,7 +83,10 @@ impl VertexBuffer {
         unsafe {
             gl::GenBuffers(1, &mut id);
         }
-        let vbo = Self { id, vertex_attributes: Vec::new() };
+        let vbo = Self {
+            id,
+            vertex_attributes: Vec::new(),
+        };
 
         vbo.bind();
         vbo.buffer_data(data);

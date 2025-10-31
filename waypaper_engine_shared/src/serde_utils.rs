@@ -2,8 +2,8 @@ use std::collections::HashMap;
 use std::str::FromStr;
 
 use cgmath::{Vector2, Vector3};
-use serde::{Deserialize, Deserializer};
 use serde::de::{Error, Unexpected};
+use serde::{Deserialize, Deserializer};
 
 use crate::project::WallpaperType;
 

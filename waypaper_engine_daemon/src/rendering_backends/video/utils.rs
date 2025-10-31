@@ -1,8 +1,8 @@
 use anyhow::anyhow;
-use ffmpeg_next::ffi::{av_image_copy_to_buffer, AVPixelFormat};
+use ffmpeg_next::Rational;
+use ffmpeg_next::ffi::{AVPixelFormat, av_image_copy_to_buffer};
 use ffmpeg_next::filter::Graph;
 use ffmpeg_next::frame::Video as VideoFrame;
-use ffmpeg_next::Rational;
 use ndarray::Array3;
 pub type FrameArray = Array3<u8>;
 
@@ -94,5 +94,3 @@ pub(crate) fn rescale_q(value: i64, src: Rational, dst: Rational) -> i64 {
     value * dst.numerator() as i64 * src.denominator() as i64
         / (dst.denominator() as i64 * src.numerator() as i64)
 }
-
-

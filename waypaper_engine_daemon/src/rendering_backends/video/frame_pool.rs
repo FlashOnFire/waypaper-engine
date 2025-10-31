@@ -1,8 +1,8 @@
 use crate::rendering_backends::video::utils::FrameArray;
-use ffmpeg_next::frame::video::Video as VideoFrame;
 use anyhow::anyhow;
+use ffmpeg_next::ffi::{AVPixelFormat, av_image_copy_to_buffer};
+use ffmpeg_next::frame::video::Video as VideoFrame;
 use std::sync::{Arc, Mutex};
-use ffmpeg_next::ffi::{av_image_copy_to_buffer, AVPixelFormat};
 
 pub struct FramePoolHandle {
     buffer: Option<Box<FrameArray>>,
@@ -11,15 +11,22 @@ pub struct FramePoolHandle {
 
 impl FramePoolHandle {
     fn new(buffer: Box<FrameArray>, pool: Arc<Mutex<Vec<Box<FrameArray>>>>) -> Self {
-        Self { buffer: Some(buffer), pool }
+        Self {
+            buffer: Some(buffer),
+            pool,
+        }
     }
 
     pub fn buffer(&self) -> &FrameArray {
-        self.buffer.as_ref().expect("FramePoolHandle buffer accessed after drop - this is a bug")
+        self.buffer
+            .as_ref()
+            .expect("FramePoolHandle buffer accessed after drop - this is a bug")
     }
 
     pub fn buffer_mut(&mut self) -> &mut FrameArray {
-        self.buffer.as_mut().expect("FramePoolHandle buffer accessed after drop - this is a bug")
+        self.buffer
+            .as_mut()
+            .expect("FramePoolHandle buffer accessed after drop - this is a bug")
     }
 
     pub fn fill_with(&mut self, frame: &mut VideoFrame) -> anyhow::Result<()> {
@@ -39,7 +46,8 @@ impl FramePoolHandle {
 
         unsafe {
             let frame_ptr = frame.as_mut_ptr();
-            let frame_format = std::mem::transmute::<std::ffi::c_int, AVPixelFormat>((*frame_ptr).format);
+            let frame_format =
+                std::mem::transmute::<std::ffi::c_int, AVPixelFormat>((*frame_ptr).format);
 
             let bytes_copied = av_image_copy_to_buffer(
                 buffer.as_mut_ptr(),
@@ -83,7 +91,11 @@ impl FramePool {
         for _ in 0..capacity {
             buffers.push(Box::new(FrameArray::default((height, width, 3))));
         }
-        Self { buffers: Arc::new(Mutex::new(buffers)), width, height }
+        Self {
+            buffers: Arc::new(Mutex::new(buffers)),
+            width,
+            height,
+        }
     }
 
     pub fn get_buffer(&mut self) -> FramePoolHandle {
