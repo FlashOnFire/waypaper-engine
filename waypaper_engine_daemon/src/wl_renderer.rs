@@ -2,11 +2,15 @@ use std::collections::HashMap;
 use std::ops::{Deref, DerefMut};
 use std::rc::Rc;
 
+use crate::egl::EGLState;
+use crate::wallpaper::Wallpaper;
+use crate::wallpaper_renderer::WPRenderer;
 use fps_counter::FPSCounter;
 use gl::COLOR_BUFFER_BIT;
 use khronos_egl::ATTRIB_NONE;
+use smithay_client_toolkit::compositor::Surface;
 use smithay_client_toolkit::output::OutputInfo;
-use smithay_client_toolkit::reexports::client::globals::{registry_queue_init, GlobalList};
+use smithay_client_toolkit::reexports::client::globals::{GlobalList, registry_queue_init};
 use smithay_client_toolkit::reexports::client::protocol::wl_output::WlOutput;
 use smithay_client_toolkit::reexports::client::protocol::wl_surface::WlSurface;
 use smithay_client_toolkit::reexports::client::protocol::{wl_output, wl_seat};
@@ -20,19 +24,14 @@ use smithay_client_toolkit::{
     registry_handlers,
     seat::{Capability, SeatHandler, SeatState},
     shell::{
+        WaylandSurface,
         wlr_layer::{
             KeyboardInteractivity, Layer, LayerShell, LayerShellHandler, LayerSurface,
             LayerSurfaceConfigure,
         },
-        WaylandSurface,
     },
 };
-use smithay_client_toolkit::compositor::Surface;
 use wayland_egl::WlEglSurface;
-use crate::egl;
-use crate::egl::EGLState;
-use crate::wallpaper::Wallpaper;
-use crate::wallpaper_renderer::WPRenderer;
 
 pub struct RenderingContext {
     _connection: Rc<Connection>,
@@ -67,7 +66,8 @@ impl RenderingContext {
     }
 
     pub fn tick(&mut self) {
-        let dispatched = self.event_queue
+        let dispatched = self
+            .event_queue
             .dispatch_pending(&mut self.wl_state)
             .expect("Failed to dispatch wayland events");
 
@@ -75,7 +75,9 @@ impl RenderingContext {
             return; // If we have dispatched some events, we don't need to do anything else
         }
 
-        self.event_queue.flush().expect("Failed to flush wayland event queue");
+        self.event_queue
+            .flush()
+            .expect("Failed to flush wayland event queue");
 
         if let Some(guard) = self.event_queue.prepare_read() {
             guard.read().expect("Failed to read wayland events");

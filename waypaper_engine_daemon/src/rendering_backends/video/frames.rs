@@ -1,7 +1,6 @@
+use crate::rendering_backends::video::frame_pool::FramePoolHandle;
 use std::cmp::{Ordering, Reverse};
 use std::collections::BinaryHeap;
-use crate::rendering_backends::video::frame_pool::FramePoolHandle;
-use crate::rendering_backends::video::utils::FrameArray;
 
 pub struct TimedVideoFrame {
     pub(crate) frame: FramePoolHandle,
@@ -67,7 +66,11 @@ where
             return;
         }
 
-        tracing::info!("capacity: {}, len: {}", self.frames.capacity(), self.frames.len());
+        tracing::info!(
+            "capacity: {}, len: {}",
+            self.frames.capacity(),
+            self.frames.len()
+        );
 
         self.frames.push(Reverse(frame));
     }

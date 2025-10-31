@@ -40,7 +40,10 @@ impl Demuxer {
                 new_time_base.denominator()
             );
 
-            input_context.stream_mut(video_stream_idx.unwrap()).unwrap().set_time_base(new_time_base);
+            input_context
+                .stream_mut(video_stream_idx.unwrap())
+                .unwrap()
+                .set_time_base(new_time_base);
         }
 
         if video_stream_idx.is_none() && audio_stream_idx.is_none() {
@@ -91,7 +94,7 @@ impl Demuxer {
         self.input_context.seek(i64::MIN, ..)
     }
 
-    pub fn video_stream(&self) -> Option<Stream> {
+    pub fn video_stream(&self) -> Option<Stream<'_>> {
         self.video_stream_idx
             .map(|stream_idx| self.input_context.stream(stream_idx).unwrap())
     }
