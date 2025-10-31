@@ -8,6 +8,7 @@
   mold-wrapped,
   pkg-config,
   wayland,
+  makeWrapper,
 }:
 let
   cargoRoot = "waypaper_engine_daemon";
@@ -29,6 +30,7 @@ rustPlatform.buildRustPackage {
     mold-wrapped
     pkg-config
     rustPlatform.bindgenHook
+    makeWrapper
   ];
 
   buildInputs = [
@@ -45,6 +47,11 @@ rustPlatform.buildRustPackage {
   '';
 
   doCheck = false;
+
+  postInstall = ''
+    wrapProgram $out/bin/${cargoToml.package.name} \
+      --set LD_LIBRARY_PATH ${lib.makeLibraryPath [ libGL ]}
+  '';
 
   meta = {
     mainProgram = cargoToml.package.name;
