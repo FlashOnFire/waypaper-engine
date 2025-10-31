@@ -32,7 +32,8 @@ rustPlatform.buildRustPackage rec {
       src
       sourceRoot
       ;
-    hash = "sha256-15oxfUbSVmUiBTsyLRvem7qIT+k5N0NMr5xcKEB/MLU=";
+    fetcherVersion = 2;
+    hash = "sha256-tFOPGIeLf1ECRG11tIfhKSlQjdX1OvBMbDhlPPB6ShQ=";
   };
 
   nativeBuildInputs = [
