@@ -5,26 +5,26 @@ authors = ["FlashOnFire"]
 edition = "2024"
 
 [dependencies]
+anyhow = "1.0.98"
 bitflags = "2.9.0"
 cgmath = "0.18.0"
+ffmpeg-next = { version = "8.0.0" }
 fps_counter = "3.0.0"
 gl = "0.14.0"
 image = "0.25.5"
 khronos-egl = { version = "6.0.0", features = ["static"] }
 linux-ipc = "0.2.1"
 lz4_flex = "0.11.3"
+ndarray = "0.16.1"
 num_enum = "0.7.3"
 num_enum_derive = "0.7.3"
 serde = { version = "1", features = ["derive"] }
-serde-this-or-that = "0.5.0"
 serde_json = "1"
+serde-this-or-that = "0.5.0"
 smithay-client-toolkit = "0.19.2"
+tikv-jemallocator = "0.6"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 wayland-egl = "0.32.5"
+waypaper_engine_shared = { path = "../waypaper_engine_shared" }
 
-ffmpeg-next = { version = "7.1.0"}
-ndarray = "0.16.1"
-
-waypaper_engine_shared = {path = "../waypaper_engine_shared"}
-anyhow = "1.0.98"
