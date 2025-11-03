@@ -1,0 +1,21 @@
+pkgbase = waypaper-engine
+	pkgdesc = Wallpaper engine for Wayland compositors
+	pkgver = 0.0.0.r158.gfc46d2a
+	pkgrel = 1
+	url = https://github.com/undermirrors/waypaper-engine
+	arch = x86_64
+	arch = aarch64
+	license = GPL3
+	makedepends = rust
+	makedepends = cargo
+	makedepends = git
+	makedepends = pnpm
+	depends = wayland
+	depends = ffmpeg
+	depends = mesa
+	depends = libxkbcommon
+	depends = webkit2gtk
+	source = git+https://github.com/undermirrors/waypaper-engine.git#branch=SaveAndLoad
+	sha256sums = SKIP
+
+pkgname = waypaper-engine

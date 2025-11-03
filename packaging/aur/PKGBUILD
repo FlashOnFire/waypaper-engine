@@ -1,0 +1,48 @@
+pkgname=waypaper-engine
+pkgver=0.0.0.r158.gfc46d2a
+pkgrel=1
+pkgdesc="Wallpaper engine for Wayland compositors"
+arch=('x86_64' 'aarch64')
+url="https://github.com/flashonfire/waypaper-engine"
+license=('GPL3')
+depends=('wayland'
+         'ffmpeg'
+         'mesa'
+         'libxkbcommon'
+         'webkit2gtk')
+makedepends=('rust' 'cargo' 'git' 'pnpm')
+source=("git+$url.git")
+# TODO
+sha256sums=('SKIP')
+
+build() {
+  cd "$srcdir/$pkgname"
+
+  cargo build --bin waypaper_engine_daemon --release --locked
+  cargo build --bin waypaper_engine_cli --release --locked
+  cargo build --bin waypaper_engine_ui --release --locked
+}
+
+package() {
+  cd "$srcdir/$pkgname"
+
+  # main binary
+  install -Dm755 "target/release/waypaper_engine_daemon" "$pkgdir/usr/bin/waypaper_engine_daemon"
+  install -Dm755 "target/release/waypaper_engine_cli" "$pkgdir/usr/bin/waypaper_engine_cli"
+  install -Dm755 "target/release/waypaper_engine_ui" "$pkgdir/usr/bin/waypaper_engine_ui"
+
+  install -Dm644 "packaging/aur/waypaper_engine.desktop" "$pkgdir/usr/share/applications/waypaper_engine.desktop"
+
+  install -Dm644 "logo.png" "$pkgdir/usr/share/pixmaps/waypaper_engine.png"
+  install -Dm644 "LICENSE" "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}
+
+pkgver() {
+  cd "$srcdir/$pkgname"
+  if git describe --tags --long >/dev/null 2>&1; then
+    git describe --tags --long | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g'
+  else
+    echo "0.0.0.r$(git rev-list --count HEAD).g$(git rev-parse --short HEAD)"
+  fi
+}
+

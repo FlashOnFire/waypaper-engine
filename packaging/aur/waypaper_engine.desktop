@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=Waypaper Engine
+Comment=Wallpaper Engine for Linux
+Exec=env WEBKIT_DISABLE_DMABUF_RENDERER=1 /usr/bin/waypaper_engine_ui
+Icon=/usr/share/pixmaps/waypaper_engine.png
+Terminal=false
+Type=Application
+Categories=Utility;
