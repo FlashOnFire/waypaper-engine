@@ -1,10 +1,12 @@
 use std::error::Error;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::mpsc;
 use std::sync::mpsc::{Sender, TryRecvError};
-use std::{fs, thread};
+use std::{env, fs, thread};
 
 use linux_ipc::IpcChannel;
+use std::collections::HashMap;
+use std::fs::File;
 use waypaper_engine_shared::ipc::{IPCError, IPCRequest, IPCResponse};
 
 use crate::wallpaper::Wallpaper;
@@ -189,75 +191,60 @@ impl AppState {
             false
         }
     }
-    pub fn save_wallpaper(id: u64, screen: &str) -> std::io::Result<()> {
-        let file_path = save_path();
-        if file_path.is_empty() {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::NotFound,
-                "HOME environment variable not set",
-            ));
+    pub fn save_wallpaper(id: u64, screen: &str) -> Result<(), Box<dyn Error>> {
+        match wallpapers_config() {
+            Ok(mut lines) => {
+                lines.insert(screen.to_string(), id);
+                let save_path = save_path()?;
+                let file = File::create(&save_path)?;
+                serde_json::to_writer_pretty(file, &lines)?;
+                Ok(())
+            }
+            Err(e) => Err(e),
         }
-        let mut lines = read_save_file(&file_path);
-
-        if let Some(line) = lines.iter_mut().find(|line| line.starts_with(screen)) {
-            *line = format!("{} = {}", screen, id);
-        } else {
-            lines.push(format!("{} = {}", screen, id));
-        }
-
-        fs::write(file_path, lines.join("\n"))?;
-        tracing::info!("{}", format!("Save wallpaper : {}", lines.join("\n")));
-        Ok(())
     }
 
-    fn load_wallpaper(&mut self) -> std::io::Result<()> {
-        let file_path = save_path();
-        let lines = read_save_file(&file_path);
-
-        lines
-            .iter()
-            .filter_map(|line| {
-                line.split_once('=').and_then(|(screen_part, id_part)| {
-                    id_part
-                        .trim()
-                        .parse::<u64>()
-                        .ok()
-                        .map(|id| (id, screen_part.trim().to_string()))
-                })
-            })
-            .for_each(|(id, screen)| {
+    fn load_wallpaper(&mut self) -> Result<(), Box<dyn Error>> {
+        match wallpapers_config() {
+            Ok(lines) => {
                 let (tx, _rx) = mpsc::channel::<IPCResponse>();
-                self.set_wallpaper(id, screen, tx);
-            });
-
-        Ok(())
+                lines.iter().for_each(|(screen, &id)| {
+                    self.set_wallpaper(id, screen.to_owned(), tx.clone());
+                });
+                Ok(())
+            }
+            Err(e) => Err(e),
+        }
     }
 }
 
-fn read_save_file(file_path: &str) -> Vec<String> {
-    let content = if Path::new(file_path).exists() {
-        fs::read_to_string(file_path).unwrap_or_else(|_| String::new())
+fn wallpapers_config() -> Result<HashMap<String, u64>, Box<dyn Error>> {
+    match save_path() {
+        Ok(file_path) => match File::open(&file_path) {
+            Ok(file) => Ok(serde_json::from_reader(file).unwrap_or_default()),
+            Err(e) => Err(Box::new(e)),
+        },
+        Err(e) => Err(e),
+    }
+}
+
+fn save_path() -> Result<String, Box<dyn Error>> {
+    let base_dir = if let Ok(xdg_config) = env::var("XDG_CONFIG_HOME") {
+        PathBuf::from(xdg_config)
+    } else if let Ok(home) = env::var("HOME") {
+        PathBuf::from(home).join(".config")
     } else {
-        String::new()
+        return Err(Box::new(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "Impossible de déterminer le répertoire de configuration",
+        )));
     };
 
-    content.lines().map(|line| line.to_string()).collect()
-}
-
-fn save_path() -> String {
-    if let Ok(home) = std::env::var("HOME") {
-        let file_path: PathBuf = PathBuf::from(home).join(".config/waypaper_engine/wallpapers.conf");
-        if let Some(parent) = file_path.parent() {
-            if !parent.exists() {
-                if let Err(err) = fs::create_dir_all(parent) {
-                    tracing::warn!("Failed to create directory {:?}: {}", parent, err);
-                } else {
-                    tracing::info!("Created directory {:?}", parent);
-                }
-            }
-        }
-        file_path.to_string_lossy().into_owned()
-    } else {
-        "".to_string()
+    let parent = base_dir.join("waypaper_engine");
+    if !parent.exists() {
+        fs::create_dir_all(&parent)?;
     }
+
+    let file_path = parent.join("wallpapers.conf");
+    Ok(file_path.to_string_lossy().into_owned())
 }
