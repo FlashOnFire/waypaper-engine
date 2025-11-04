@@ -42,7 +42,7 @@ pub struct RenderingContext {
 }
 
 impl RenderingContext {
-    pub fn new(new_output_tx: Sender<(WlOutput, OutputInfo)>) -> Self {
+    pub fn new(new_output_tx: Sender<OutputInfo>) -> Self {
         let connection = Rc::new(Connection::connect_to_env().unwrap());
         let egl_state = Rc::new(EGLState::new(connection.clone()));
         let (globals, event_queue): (GlobalList, EventQueue<WLState>) =
@@ -136,7 +136,7 @@ pub struct WLState {
     layer_shell: LayerShell,
 
     pub layers: HashMap<String, SimpleLayer>,
-    new_output_tx: Sender<(WlOutput, OutputInfo)>,
+    new_output_tx: Sender<OutputInfo>,
 }
 
 impl WLState {
@@ -145,7 +145,7 @@ impl WLState {
         egl_state: Rc<EGLState>,
         globals: &GlobalList,
         queue_handle: QueueHandle<Self>,
-        new_output_tx: Sender<(WlOutput, OutputInfo)>,
+        new_output_tx: Sender<OutputInfo>,
     ) -> Self {
         Self {
             connection,
@@ -358,7 +358,7 @@ impl OutputHandler for WLState {
         match self.output_state.info(&output) {
             Some(infos) => {
                 self.new_output_tx
-                    .send((output, infos))
+                    .send(infos)
                     .expect("Error sending new output event");
             }
             None => tracing::error!("Could not retrieve new output info"),
