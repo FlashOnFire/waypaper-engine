@@ -22,9 +22,16 @@ impl AppState {
             wpe_dir.to_string_lossy()
         );
 
+        let (new_output_tx, new_output_rx) = crossbeam::channel::unbounded();
+        thread::spawn(move || {
+            loop {
+                println!("new output: {:?}", new_output_rx.recv().expect("oui"));
+            }
+        });
+
         AppState {
             wpe_dir,
-            rendering_context: RenderingContext::new(),
+            rendering_context: RenderingContext::new(new_output_tx),
         }
     }
 

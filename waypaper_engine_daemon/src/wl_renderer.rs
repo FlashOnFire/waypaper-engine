@@ -5,6 +5,7 @@ use std::rc::Rc;
 use crate::egl::EGLState;
 use crate::wallpaper::Wallpaper;
 use crate::wallpaper_renderer::WPRenderer;
+use crossbeam::channel::Sender;
 use fps_counter::FPSCounter;
 use gl::COLOR_BUFFER_BIT;
 use khronos_egl::ATTRIB_NONE;
@@ -41,7 +42,7 @@ pub struct RenderingContext {
 }
 
 impl RenderingContext {
-    pub fn new() -> Self {
+    pub fn new(new_output_tx: Sender<(WlOutput, OutputInfo)>) -> Self {
         let connection = Rc::new(Connection::connect_to_env().unwrap());
         let egl_state = Rc::new(EGLState::new(connection.clone()));
         let (globals, event_queue): (GlobalList, EventQueue<WLState>) =
@@ -53,6 +54,7 @@ impl RenderingContext {
             egl_state.clone(),
             &globals,
             queue_handle,
+            new_output_tx,
         );
 
         tracing::info!("Created WL state");
@@ -134,6 +136,7 @@ pub struct WLState {
     layer_shell: LayerShell,
 
     pub layers: HashMap<String, SimpleLayer>,
+    new_output_tx: Sender<(WlOutput, OutputInfo)>,
 }
 
 impl WLState {
@@ -142,6 +145,7 @@ impl WLState {
         egl_state: Rc<EGLState>,
         globals: &GlobalList,
         queue_handle: QueueHandle<Self>,
+        new_output_tx: Sender<(WlOutput, OutputInfo)>,
     ) -> Self {
         Self {
             connection,
@@ -156,6 +160,7 @@ impl WLState {
             queue_handle,
 
             layers: HashMap::new(),
+            new_output_tx,
         }
     }
 
@@ -226,15 +231,6 @@ impl WLState {
     }
 }
 
-impl Drop for SimpleLayer {
-    fn drop(&mut self) {
-        self.egl_state
-            .egl
-            .destroy_surface(self.egl_state.egl_display, self.egl_window_surface)
-            .expect("Couldn't destroy surface");
-    }
-}
-
 pub struct OutputsList(HashMap<WlOutput, OutputInfo>);
 
 impl OutputsList {
@@ -288,6 +284,15 @@ pub struct SimpleLayer {
     renderer: WPRenderer,
     wallpaper: Option<Wallpaper>,
     fps_counter: FPSCounter,
+}
+
+impl Drop for SimpleLayer {
+    fn drop(&mut self) {
+        self.egl_state
+            .egl
+            .destroy_surface(self.egl_state.egl_display, self.egl_window_surface)
+            .expect("Couldn't destroy surface");
+    }
 }
 
 impl CompositorHandler for WLState {
@@ -349,7 +354,16 @@ impl OutputHandler for WLState {
         &mut self.output_state
     }
 
-    fn new_output(&mut self, _conn: &Connection, _qh: &QueueHandle<Self>, _output: WlOutput) {}
+    fn new_output(&mut self, _conn: &Connection, _qh: &QueueHandle<Self>, output: WlOutput) {
+        match self.output_state.info(&output) {
+            Some(infos) => {
+                self.new_output_tx
+                    .send((output, infos))
+                    .expect("Error sending new output event");
+            }
+            None => tracing::error!("Could not retrieve new output info"),
+        }
+    }
 
     fn update_output(&mut self, _conn: &Connection, _qh: &QueueHandle<Self>, _output: WlOutput) {
         // TODO resize wallpaper if output size or scale has changed

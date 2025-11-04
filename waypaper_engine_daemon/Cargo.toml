@@ -28,3 +28,4 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 wayland-egl = "0.32.5"
 waypaper_engine_shared = { path = "../waypaper_engine_shared" }
+crossbeam   = "0.8.4"
