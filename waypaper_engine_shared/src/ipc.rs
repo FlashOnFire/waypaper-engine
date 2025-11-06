@@ -1,10 +1,17 @@
 use serde::{Deserialize, Serialize};
+use subenum::subenum;
 
+#[subenum(IPCRequest)]
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub enum IPCRequest {
+pub enum InternalRequest {
+    #[subenum(IPCRequest)]
     SetWallpaper { id: u64, screen: String },
+    #[subenum(IPCRequest)]
     KillDaemon,
+    #[subenum(IPCRequest)]
     ListOutputs,
+    
+    LoadWallpaper { screen: String },
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
