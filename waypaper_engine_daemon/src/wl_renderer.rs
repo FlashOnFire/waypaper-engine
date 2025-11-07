@@ -358,7 +358,7 @@ impl OutputHandler for WLState {
         match self.output_state.info(&output) {
             Some(infos) => {
                 let (resp_tx, _resp_rx) = std::sync::mpsc::channel::<IPCResponse>();
-                self.new_output_tx.send((InternalRequest::LoadWallpaper { screen: infos.name.unwrap()}, resp_tx)).unwrap();
+                self.new_output_tx.send((InternalRequest::NewOutput { screen: infos.name.unwrap()}, resp_tx)).unwrap();
             }
             None => tracing::error!("Could not retrieve new output info"),
         }

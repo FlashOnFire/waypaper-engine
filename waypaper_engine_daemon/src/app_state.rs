@@ -12,8 +12,8 @@ use waypaper_engine_shared::ipc::{IPCError, IPCRequest, IPCResponse, InternalReq
 pub struct AppState {
     wpe_dir: PathBuf,
     rendering_context: RenderingContext,
-    tx: Sender<(InternalRequest, Sender<IPCResponse>)>,
-    rx: Receiver<(InternalRequest, Sender<IPCResponse>)>,
+    ipc_sender: Sender<(InternalRequest, Sender<IPCResponse>)>,
+    ipc_receiver: Receiver<(InternalRequest, Sender<IPCResponse>)>,
 }
 
 impl AppState {
@@ -23,20 +23,21 @@ impl AppState {
             wpe_dir.to_string_lossy()
         );
 
-        let (tx, rx) = mpsc::channel::<(InternalRequest, Sender<IPCResponse>)>();
+        let (ipc_sender, ipc_receiver) = mpsc::channel::<(InternalRequest, Sender<IPCResponse>)>();
 
         AppState {
             wpe_dir,
-            rendering_context: RenderingContext::new(tx.clone()),
-            tx,
-            rx,
+            rendering_context: RenderingContext::new(ipc_sender.clone()),
+            ipc_sender,
+            ipc_receiver,
         }
     }
 
     pub fn run(&mut self) -> Result<(), Box<dyn Error>> {
         ffmpeg_next::init()?;
 
-        let tx_b = self.tx.clone();
+        // we clone here to be thread safe
+        let ipc_sender = self.ipc_sender.clone();
 
         let ipc_thread = thread::spawn(move || {
             let mut channel = IpcChannel::new("/tmp/waypaper-engine.sock").unwrap();
@@ -52,7 +53,7 @@ impl AppState {
                         }
 
                         let (req_tx, req_rx) = mpsc::channel::<IPCResponse>();
-                        tx_b.send((InternalRequest::from(request.clone()), req_tx))
+                        ipc_sender.send((InternalRequest::from(request.clone()), req_tx))
                             .unwrap();
                         match req_rx.recv() {
                             Ok(response) => {
@@ -78,7 +79,7 @@ impl AppState {
         loop {
             self.rendering_context.tick();
 
-            match self.rx.try_recv() {
+            match self.ipc_receiver.try_recv() {
                 Ok((req, response)) => match req {
                     InternalRequest::SetWallpaper { id, screen } => {
                         if Self::set_wallpaper(self, id, &screen, response) {
@@ -98,7 +99,7 @@ impl AppState {
                     InternalRequest::KillDaemon => {
                         unreachable!()
                     }
-                    InternalRequest::LoadWallpaper { screen } => {
+                    InternalRequest::NewOutput { screen } => {
                         if let Ok(id) = ProfileManager::load_wallpaper(&screen) && Self::set_wallpaper(self, id, &screen, response) {
                             tracing::info!("Wallpaper [{}] loaded for screen [{}]", id, screen);
                         }

@@ -11,7 +11,7 @@ pub enum InternalRequest {
     #[subenum(IPCRequest)]
     ListOutputs,
     
-    LoadWallpaper { screen: String },
+    NewOutput { screen: String },
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
