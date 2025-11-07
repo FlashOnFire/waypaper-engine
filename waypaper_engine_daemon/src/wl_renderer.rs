@@ -42,7 +42,7 @@ pub struct RenderingContext {
 }
 
 impl RenderingContext {
-    pub fn new(new_output_tx: Sender<(InternalRequest, Sender<IPCResponse>)>) -> Self {
+    pub fn new(internal_ipc_tx: Sender<(InternalRequest, Sender<IPCResponse>)>) -> Self {
         let connection = Rc::new(Connection::connect_to_env().unwrap());
         let egl_state = Rc::new(EGLState::new(connection.clone()));
         let (globals, event_queue): (GlobalList, EventQueue<WLState>) =
@@ -54,7 +54,7 @@ impl RenderingContext {
             egl_state.clone(),
             &globals,
             queue_handle,
-            new_output_tx,
+            internal_ipc_tx,
         );
 
         tracing::info!("Created WL state");

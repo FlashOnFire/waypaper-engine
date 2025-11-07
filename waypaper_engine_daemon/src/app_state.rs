@@ -12,8 +12,8 @@ use waypaper_engine_shared::ipc::{IPCError, IPCRequest, IPCResponse, InternalReq
 pub struct AppState {
     wpe_dir: PathBuf,
     rendering_context: RenderingContext,
-    ipc_sender: Sender<(InternalRequest, Sender<IPCResponse>)>,
-    ipc_receiver: Receiver<(InternalRequest, Sender<IPCResponse>)>,
+    internal_ipc_tx: Sender<(InternalRequest, Sender<IPCResponse>)>,
+    internal_ipc_rx: Receiver<(InternalRequest, Sender<IPCResponse>)>,
 }
 
 impl AppState {
@@ -23,13 +23,13 @@ impl AppState {
             wpe_dir.to_string_lossy()
         );
 
-        let (ipc_sender, ipc_receiver) = mpsc::channel::<(InternalRequest, Sender<IPCResponse>)>();
+        let (internal_ipc_tx, internal_ipc_rx) = mpsc::channel::<(InternalRequest, Sender<IPCResponse>)>();
 
         AppState {
             wpe_dir,
-            rendering_context: RenderingContext::new(ipc_sender.clone()),
-            ipc_sender,
-            ipc_receiver,
+            rendering_context: RenderingContext::new(internal_ipc_tx.clone()),
+            internal_ipc_tx,
+            internal_ipc_rx,
         }
     }
 
@@ -37,7 +37,7 @@ impl AppState {
         ffmpeg_next::init()?;
 
         // we clone here to be thread safe
-        let ipc_sender = self.ipc_sender.clone();
+        let internal_ipc_tx = self.internal_ipc_tx.clone();
 
         let ipc_thread = thread::spawn(move || {
             let mut channel = IpcChannel::new("/tmp/waypaper-engine.sock").unwrap();
@@ -53,7 +53,7 @@ impl AppState {
                         }
 
                         let (req_tx, req_rx) = mpsc::channel::<IPCResponse>();
-                        ipc_sender.send((InternalRequest::from(request.clone()), req_tx))
+                        internal_ipc_tx.send((InternalRequest::from(request.clone()), req_tx))
                             .unwrap();
                         match req_rx.recv() {
                             Ok(response) => {
@@ -79,7 +79,7 @@ impl AppState {
         loop {
             self.rendering_context.tick();
 
-            match self.ipc_receiver.try_recv() {
+            match self.internal_ipc_rx.try_recv() {
                 Ok((req, response)) => match req {
                     InternalRequest::SetWallpaper { id, screen } => {
                         if Self::set_wallpaper(self, id, &screen, response) {
