@@ -13,6 +13,7 @@ mod tex_file;
 mod wallpaper;
 mod wallpaper_renderer;
 mod wl_renderer;
+mod profile_manager;
 
 #[global_allocator]
 static ALLOC: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
