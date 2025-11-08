@@ -30,7 +30,7 @@ use smithay_client_toolkit::{
 use std::collections::HashMap;
 use std::ops::{Deref, DerefMut};
 use std::rc::Rc;
-use std::sync::mpsc::Sender;
+use crossbeam::channel::Sender;
 use wayland_egl::WlEglSurface;
 use waypaper_engine_shared::ipc::{IPCResponse, InternalRequest};
 
@@ -357,7 +357,7 @@ impl OutputHandler for WLState {
     fn new_output(&mut self, _conn: &Connection, _qh: &QueueHandle<Self>, output: WlOutput) {
         match self.output_state.info(&output) {
             Some(infos) => {
-                let (resp_tx, _resp_rx) = std::sync::mpsc::channel::<IPCResponse>();
+                let (resp_tx, _resp_rx) = crossbeam::channel::unbounded::<IPCResponse>();
                 self.new_output_tx
                     .send((
                         InternalRequest::NewOutput {

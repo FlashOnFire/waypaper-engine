@@ -4,9 +4,8 @@ use crate::wl_renderer::RenderingContext;
 use linux_ipc::IpcChannel;
 use std::error::Error;
 use std::path::PathBuf;
-use std::sync::mpsc;
-use std::sync::mpsc::{Receiver, Sender, TryRecvError};
 use std::thread;
+use crossbeam::channel::{Receiver, Sender, TryRecvError};
 use waypaper_engine_shared::ipc::{IPCError, IPCRequest, IPCResponse, InternalRequest};
 
 pub struct AppState {
@@ -24,7 +23,7 @@ impl AppState {
         );
 
         let (internal_ipc_tx, internal_ipc_rx) =
-            mpsc::channel::<(InternalRequest, Sender<IPCResponse>)>();
+            crossbeam::channel::unbounded::<(InternalRequest, Sender<IPCResponse>)>();
 
         AppState {
             wpe_dir,
@@ -53,7 +52,7 @@ impl AppState {
                             break;
                         }
 
-                        let (req_tx, req_rx) = mpsc::channel::<IPCResponse>();
+                        let (req_tx, req_rx) = crossbeam::channel::unbounded::<IPCResponse>();
                         internal_ipc_tx
                             .send((InternalRequest::from(request.clone()), req_tx))
                             .unwrap();
