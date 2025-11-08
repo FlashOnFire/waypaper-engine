@@ -23,7 +23,8 @@ impl AppState {
             wpe_dir.to_string_lossy()
         );
 
-        let (internal_ipc_tx, internal_ipc_rx) = mpsc::channel::<(InternalRequest, Sender<IPCResponse>)>();
+        let (internal_ipc_tx, internal_ipc_rx) =
+            mpsc::channel::<(InternalRequest, Sender<IPCResponse>)>();
 
         AppState {
             wpe_dir,
@@ -53,7 +54,8 @@ impl AppState {
                         }
 
                         let (req_tx, req_rx) = mpsc::channel::<IPCResponse>();
-                        internal_ipc_tx.send((InternalRequest::from(request.clone()), req_tx))
+                        internal_ipc_tx
+                            .send((InternalRequest::from(request.clone()), req_tx))
                             .unwrap();
                         match req_rx.recv() {
                             Ok(response) => {
@@ -100,7 +102,9 @@ impl AppState {
                         unreachable!()
                     }
                     InternalRequest::NewOutput { screen } => {
-                        if let Ok(id) = ProfileManager::load_wallpaper(&screen) && Self::set_wallpaper(self, id, &screen, response) {
+                        if let Ok(id) = ProfileManager::load_wallpaper(&screen)
+                            && Self::set_wallpaper(self, id, &screen, response)
+                        {
                             tracing::info!("Wallpaper [{}] loaded for screen [{}]", id, screen);
                         }
                     }
@@ -119,7 +123,7 @@ impl AppState {
         Ok(())
     }
 
-    fn set_wallpaper(&mut self, id: u64, screen: &String, response: Sender<IPCResponse>) -> bool {
+    fn set_wallpaper(&mut self, id: u64, screen: &str, response: Sender<IPCResponse>) -> bool {
         let outputs = self.rendering_context.get_outputs();
 
         if let Some(output) = outputs
@@ -141,11 +145,12 @@ impl AppState {
                 response
                     .send(IPCResponse::Error(IPCError::WallpaperNotFound))
                     .unwrap();
-                return false; // not sure about this
+                // The wallpaper path is expected to be a directory containing wallpaper resources.
+                return false;
             }
 
-            let wallpaper = Wallpaper::new(path).expect("no path found");
-            let path = self.wpe_dir.join(id.to_string());
+            let wallpaper = Wallpaper::new(path.clone())
+                .expect("failed to load wallpaper: invalid format or corrupted data");
             match wallpaper {
                 Wallpaper::Video { ref project, .. } => {
                     let video_path = path.join(project.file.as_ref().unwrap());

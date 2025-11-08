@@ -24,14 +24,14 @@ impl ProfileManager {
         Ok(())
     }
 
-    pub fn load_wallpaper(screen: &String) -> Result<u64, ()> {
-        let mut wallpapers: HashMap<String, u64> = HashMap::new();
-
-        if let Ok(file_path) = save_dir()
+    pub fn load_wallpaper(screen: &str) -> Result<u64, ()> {
+        let wallpapers: HashMap<String, u64> = if let Ok(file_path) = save_dir()
             && let Ok(file) = File::open(&file_path)
         {
-            wallpapers = serde_json::from_reader(file).unwrap_or_default();
-        }
+            serde_json::from_reader(file).unwrap_or_default()
+        } else {
+            HashMap::new()
+        };
 
         if let Some(&id) = wallpapers.get(screen) {
             return Ok(id);
@@ -47,7 +47,7 @@ pub fn save_dir() -> Result<PathBuf, Box<dyn Error>> {
     } else {
         return Err(Box::new(std::io::Error::new(
             std::io::ErrorKind::NotFound,
-            "Impossible de déterminer le répertoire de configuration",
+            "Unable to determine configuration directory",
         )));
     };
 

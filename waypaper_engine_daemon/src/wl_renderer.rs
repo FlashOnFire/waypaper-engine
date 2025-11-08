@@ -1,7 +1,3 @@
-use std::collections::HashMap;
-use std::ops::{Deref, DerefMut};
-use std::rc::Rc;
-use std::sync::mpsc::Sender;
 use crate::egl::EGLState;
 use crate::wallpaper::Wallpaper;
 use crate::wallpaper_renderer::WPRenderer;
@@ -31,6 +27,10 @@ use smithay_client_toolkit::{
         },
     },
 };
+use std::collections::HashMap;
+use std::ops::{Deref, DerefMut};
+use std::rc::Rc;
+use std::sync::mpsc::Sender;
 use wayland_egl::WlEglSurface;
 use waypaper_engine_shared::ipc::{IPCResponse, InternalRequest};
 
@@ -358,7 +358,14 @@ impl OutputHandler for WLState {
         match self.output_state.info(&output) {
             Some(infos) => {
                 let (resp_tx, _resp_rx) = std::sync::mpsc::channel::<IPCResponse>();
-                self.new_output_tx.send((InternalRequest::NewOutput { screen: infos.name.unwrap()}, resp_tx)).unwrap();
+                self.new_output_tx
+                    .send((
+                        InternalRequest::NewOutput {
+                            screen: infos.name.unwrap(),
+                        },
+                        resp_tx,
+                    ))
+                    .unwrap();
             }
             None => tracing::error!("Could not retrieve new output info"),
         }
