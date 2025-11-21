@@ -13,7 +13,7 @@ pub struct AppState {
     rendering_context: RenderingContext,
     internal_ipc_tx: Sender<(InternalRequest, Sender<IPCResponse>)>,
     internal_ipc_rx: Receiver<(InternalRequest, Sender<IPCResponse>)>,
-    profile_manager: ProfileManager
+    profile_manager: ProfileManager,
 }
 
 impl AppState {
@@ -38,7 +38,6 @@ impl AppState {
     pub fn run(&mut self) -> Result<(), Box<dyn Error>> {
         ffmpeg_next::init()?;
 
-        // we clone here to be thread safe
         let internal_ipc_tx = self.internal_ipc_tx.clone();
 
         let ipc_thread = thread::spawn(move || {
@@ -85,10 +84,8 @@ impl AppState {
             match self.internal_ipc_rx.try_recv() {
                 Ok((req, response)) => match req {
                     InternalRequest::SetWallpaper { id, screen } => {
-                        if Self::set_wallpaper(self, id, &screen, &response)
-                            && let Err(err) = self.profile_manager.save_wallpaper(id, &screen)
-                        {
-                            tracing::warn!("Unable to save wallpaper: {}", err);
+                        if Self::set_wallpaper(self, id, &screen, &response) {
+                            self.profile_manager.save_wallpaper(id, &screen);
                         }
                     }
 
