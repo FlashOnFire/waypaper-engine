@@ -1,3 +1,4 @@
+use std::env;
 use std::path::PathBuf;
 
 pub mod ipc;
@@ -7,7 +8,7 @@ pub mod serde_utils;
 const WPE_DIR: &str = ".steam/steam/steamapps/workshop/content/431960/";
 
 pub fn get_wpe_dir() -> PathBuf {
-    let wpe_dir = PathBuf::from(std::env::var("HOME").expect("No HOME environment variable set ?"))
+    let wpe_dir = PathBuf::from(env::var("HOME").expect("No HOME environment variable set ?"))
         .join(WPE_DIR);
 
     assert!(

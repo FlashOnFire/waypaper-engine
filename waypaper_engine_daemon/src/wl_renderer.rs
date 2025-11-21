@@ -1,11 +1,6 @@
-use std::collections::HashMap;
-use std::ops::{Deref, DerefMut};
-use std::rc::Rc;
-
 use crate::egl::EGLState;
 use crate::wallpaper::Wallpaper;
 use crate::wallpaper_renderer::WPRenderer;
-use crossbeam::channel::Sender;
 use fps_counter::FPSCounter;
 use gl::COLOR_BUFFER_BIT;
 use khronos_egl::ATTRIB_NONE;
@@ -32,7 +27,12 @@ use smithay_client_toolkit::{
         },
     },
 };
+use std::collections::HashMap;
+use std::ops::{Deref, DerefMut};
+use std::rc::Rc;
+use crossbeam::channel::{RecvError, Sender};
 use wayland_egl::WlEglSurface;
+use waypaper_engine_shared::ipc::{IPCResponse, InternalRequest};
 
 pub struct RenderingContext {
     _connection: Rc<Connection>,
@@ -42,7 +42,7 @@ pub struct RenderingContext {
 }
 
 impl RenderingContext {
-    pub fn new(new_output_tx: Sender<(WlOutput, OutputInfo)>) -> Self {
+    pub fn new(internal_ipc_tx: Sender<(InternalRequest, Sender<IPCResponse>)>) -> Self {
         let connection = Rc::new(Connection::connect_to_env().unwrap());
         let egl_state = Rc::new(EGLState::new(connection.clone()));
         let (globals, event_queue): (GlobalList, EventQueue<WLState>) =
@@ -54,7 +54,7 @@ impl RenderingContext {
             egl_state.clone(),
             &globals,
             queue_handle,
-            new_output_tx,
+            internal_ipc_tx,
         );
 
         tracing::info!("Created WL state");
@@ -136,7 +136,7 @@ pub struct WLState {
     layer_shell: LayerShell,
 
     pub layers: HashMap<String, SimpleLayer>,
-    new_output_tx: Sender<(WlOutput, OutputInfo)>,
+    new_output_tx: Sender<(InternalRequest, Sender<IPCResponse>)>,
 }
 
 impl WLState {
@@ -145,7 +145,7 @@ impl WLState {
         egl_state: Rc<EGLState>,
         globals: &GlobalList,
         queue_handle: QueueHandle<Self>,
-        new_output_tx: Sender<(WlOutput, OutputInfo)>,
+        new_output_tx: Sender<(InternalRequest, Sender<IPCResponse>)>,
     ) -> Self {
         Self {
             connection,
@@ -357,9 +357,15 @@ impl OutputHandler for WLState {
     fn new_output(&mut self, _conn: &Connection, _qh: &QueueHandle<Self>, output: WlOutput) {
         match self.output_state.info(&output) {
             Some(infos) => {
+                let (resp_tx, _resp_rx) = crossbeam::channel::unbounded::<IPCResponse>();
                 self.new_output_tx
-                    .send((output, infos))
-                    .expect("Error sending new output event");
+                    .send((
+                        InternalRequest::NewOutput {
+                            screen: infos.name.unwrap(),
+                        },
+                        resp_tx,
+                    ))
+                    .unwrap_or_else(|e| tracing::error!("Failed to send new output event: {}", e));
             }
             None => tracing::error!("Could not retrieve new output info"),
         }
@@ -511,7 +517,7 @@ impl SimpleLayer {
             .swap_buffers(self.egl_state.egl_display, self.egl_window_surface)
             .unwrap();
 
-        // Now that buffers are swapped we can reset the egl context
+        // Now that buffers are swapped, we can reset the egl context
         self.egl_state.detach_context();
 
         // Request our next frame

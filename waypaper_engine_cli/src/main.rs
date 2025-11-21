@@ -147,6 +147,10 @@ fn print_ipc_error(error: &IPCError, json_output: bool) {
             "internal_error",
             "An internal error occurred while processing the request.",
         ),
+        IPCError::WallpaperLoadingError => (
+            "wallpaper_loading_error",
+            "Unable to load correctly wallpaper",
+        ),
     };
 
     if json_output {
